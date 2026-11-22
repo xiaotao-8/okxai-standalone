@@ -4,7 +4,20 @@ import Foundation
 struct OKXResponse<T: Decodable>: Decodable {
     let code: String
     let msg: String
-    let data: T
+    let data: T?
+}
+
+/// 只读欧易错误包体（解码失败时用来取出真实的 code/msg）
+struct OKXErrorEnvelope: Decodable {
+    let code: String
+    let msg: String
+}
+
+private extension KeyedDecodingContainer {
+    /// 宽容读字符串：缺字段、null、非字符串一律当 ""
+    func decodeString(_ key: Key) -> String {
+        (try? decodeIfPresent(String.self, forKey: key)) ?? ""
+    }
 }
 
 // MARK: - 行情
@@ -40,6 +53,16 @@ struct BalanceDetail: Identifiable, Codable {
     let cashBal: String
     let frozenBal: String
     let availBal: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ccy = c.decodeString(.ccy)
+        eq = c.decodeString(.eq)
+        cashBal = c.decodeString(.cashBal)
+        frozenBal = c.decodeString(.frozenBal)
+        availBal = c.decodeString(.availBal)
+    }
+
     var id: String { ccy }
     var eqValue: Double { Double(eq) ?? 0 }
 }
@@ -57,6 +80,19 @@ struct Position: Identifiable, Codable {
     let uplRatio: String
     let lever: String
     let mgnMode: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        instId = c.decodeString(.instId)
+        pos = c.decodeString(.pos)
+        posCcy = c.decodeString(.posCcy)
+        avgPx = c.decodeString(.avgPx)
+        upl = c.decodeString(.upl)
+        uplRatio = c.decodeString(.uplRatio)
+        lever = c.decodeString(.lever)
+        mgnMode = c.decodeString(.mgnMode)
+    }
+
     var id: String { instId }
     var posValue: Double { Double(pos) ?? 0 }
     var uplValue: Double { Double(upl) ?? 0 }

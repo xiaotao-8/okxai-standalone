@@ -98,11 +98,28 @@ final class OKXAPI {
         guard (200..<300).contains(http.statusCode) else {
             throw OKXError.http(http.statusCode, text)
         }
-        let decoded = try JSONDecoder().decode(OKXResponse<T>.self, from: data)
-        guard decoded.code == "0" else {
-            throw OKXError.api(decoded.code, decoded.msg)
+        if data.isEmpty {
+            throw OKXError.http(http.statusCode, "服务器返回了空响应，请检查网络或关闭 VPN 后重试")
         }
-        return decoded.data
+        do {
+            let decoded = try JSONDecoder().decode(OKXResponse<T>.self, from: data)
+            guard decoded.code == "0" else {
+                throw OKXError.api(decoded.code, decoded.msg)
+            }
+            guard let value = decoded.data else {
+                throw OKXError.api(decoded.code, "欧易未返回数据")
+            }
+            return value
+        } catch let err as OKXError {
+            throw err
+        } catch {
+            // 解码失败时只读 code/msg，把欧易的真实原因露出来
+            if let env = try? JSONDecoder().decode(OKXErrorEnvelope.self, from: data),
+               env.code != "0" {
+                throw OKXError.api(env.code, env.msg)
+            }
+            throw OKXError.http(http.statusCode, "响应无法解析：\(String(text.prefix(120)))")
+        }
     }
 
     // MARK: - 行情（公共接口）
