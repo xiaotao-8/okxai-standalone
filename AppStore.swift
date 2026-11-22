@@ -592,7 +592,7 @@ final class AppStore: ObservableObject {
             return ("place_order", args, "已生成订单草稿，等待用户确认：\(instId) \(side) \(ordType) 数量 \(sz)")
         case "get_ticker":
             let t = try? await okx.ticker(instId: instId)
-            let text = t.map { "\($0.instId) 最新价 \($0.last)，24h 涨跌 \(String(format: "%.2f", $0.changePct))%" } ?? "查询失败"
+            let text = t?.first.map { "\($0.instId) 最新价 \($0.last)，24h 涨跌 \(String(format: "%.2f", $0.changePct))%" } ?? "查询失败"
             return ("get_ticker", args, text)
         case "get_balance":
             let list = (try? await okx.balance()) ?? []
