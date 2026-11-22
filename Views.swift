@@ -159,7 +159,7 @@ struct TickerDetailView: View {
                     }
                     Text(ticker?.last ?? "--")
                         .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .foregroundStyle((ticker?.changePct ?? 0) >= 0 ? .upGreen : .downRed)
+                        .foregroundStyle((ticker?.changePct ?? 0) >= 0 ? Color.upGreen : Color.downRed)
 
                     HStack {
                         stat("24h最高", ticker?.high24h ?? "--")
@@ -180,7 +180,7 @@ struct TickerDetailView: View {
                                 Task { await store.loadCandles(instId: instId, bar: b) }
                             }
                             .font(.caption)
-                            .foregroundStyle(bar == b ? .appBg : .textSecondary)
+                            .foregroundStyle(bar == b ? Color.appBg : Color.textSecondary)
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background(bar == b ? Color.accent : Color.cardBg2, in: Capsule())
                         }
@@ -297,10 +297,10 @@ struct TickerDetailView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(String(format: "%.4f", p.target))
                                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                                    .foregroundStyle(p.pct >= 0 ? .upGreen : .downRed)
+                                    .foregroundStyle(p.pct >= 0 ? Color.upGreen : Color.downRed)
                                 Text(String(format: "%+.2f%%", p.pct))
                                     .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(p.pct >= 0 ? .upGreen : .downRed)
+                                    .foregroundStyle(p.pct >= 0 ? Color.upGreen : Color.downRed)
                             }
                             Spacer()
                             Text(p.reason)
@@ -327,7 +327,7 @@ struct TickerDetailView: View {
                         HStack {
                             Text(t.side == "buy" ? "买" : "卖")
                                 .font(.caption2)
-                                .foregroundStyle(t.side == "buy" ? .upGreen : .downRed)
+                                .foregroundStyle(t.side == "buy" ? Color.upGreen : Color.downRed)
                             Text(t.px ?? "--")
                                 .font(.system(.caption, design: .monospaced))
                             Spacer()
@@ -638,7 +638,7 @@ struct AccountView: View {
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(String(format: "%.2f", p.uplValue))
                                         .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(p.uplValue >= 0 ? .upGreen : .downRed)
+                                        .foregroundStyle(p.uplValue >= 0 ? Color.upGreen : Color.downRed)
                                     Text("均价 \(p.avgPx)")
                                         .font(.caption2).foregroundStyle(Color.textSecondary)
                                     if p.markPxValue > 0 {
@@ -666,7 +666,7 @@ struct AccountView: View {
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(b.balChg ?? "--")
                                         .font(.system(.caption, design: .monospaced))
-                                        .foregroundStyle((Double(b.balChg ?? "0") ?? 0) >= 0 ? .upGreen : .downRed)
+                                        .foregroundStyle((Double(b.balChg ?? "0") ?? 0) >= 0 ? Color.upGreen : Color.downRed)
                                     Text("余额 \(b.bal ?? "--")")
                                         .font(.caption2).foregroundStyle(Color.textSecondary)
                                 }
@@ -972,7 +972,7 @@ struct TradeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(side == value ? color : Color.cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .foregroundStyle(side == value ? .white : .textSecondary)
+                .foregroundStyle(side == value ? .white : Color.textSecondary)
         }
         .buttonStyle(PressScale())
     }
@@ -1235,7 +1235,7 @@ struct AIChatView: View {
                 Spacer()
                 Text(d.side.uppercased())
                     .font(.system(.caption, weight: .bold))
-                    .foregroundStyle(d.side == "buy" ? .upGreen : .downRed)
+                    .foregroundStyle(d.side == "buy" ? Color.upGreen : Color.downRed)
             }
             Text("\(d.ordType) · 数量 \(d.sz)\(d.px != nil ? " · 价格 \(d.px!)" : "")")
                 .font(.caption).foregroundStyle(Color.textSecondary)
@@ -1736,7 +1736,7 @@ struct HomeView: View {
                 .lineLimit(1).minimumScaleFactor(0.6)
             Text(String(format: "%+.2f%%", t?.changePct ?? 0))
                 .font(.caption2)
-                .foregroundStyle((t?.changePct ?? 0) >= 0 ? .upGreen : .downRed)
+                .foregroundStyle((t?.changePct ?? 0) >= 0 ? Color.upGreen : Color.downRed)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
