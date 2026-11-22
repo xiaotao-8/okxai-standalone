@@ -341,7 +341,11 @@ final class AppStore: ObservableObject {
         case "get_ticker":
             let instId = (p["instId"] as? String) ?? "BTC-USDT"
             do {
-                let t = try await okx.ticker(instId: instId)
+                let list = try await okx.ticker(instId: instId)
+                guard let t = list.first else {
+                    appendChat("tool", "查询 \(instId) 行情失败：无数据", toolCall: ToolCallInfo(name: name, success: false))
+                    return "查询失败：无数据"
+                }
                 let summary = "已查询 \(instId) · \(t.last)（\(String(format: "%+.2f%%", t.changePct))）"
                 appendChat("tool", summary, toolCall: ToolCallInfo(name: name, success: true))
                 return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(t))) ?? "查询失败"
