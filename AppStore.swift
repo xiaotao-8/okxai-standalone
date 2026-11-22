@@ -23,6 +23,8 @@ final class AppStore: ObservableObject {
     // 聊天
     @Published var chat: [ChatMessage] = []
     @Published var busy = false
+    /// 智能体当前在干什么（显示在对话底部状态行）
+    @Published var agentStatus: String? = nil
 
     private let okx = OKXAPI.shared
     private let ai = AIClient()
@@ -100,8 +102,13 @@ final class AppStore: ObservableObject {
 
     // MARK: - AI 对话
 
-    private func appendChat(_ role: String, _ text: String, draft: OrderDraft? = nil) {
-        chat.append(ChatMessage(role: role, text: text, orderDraft: draft))
+    private func appendChat(_ role: String, _ text: String, draft: OrderDraft? = nil, toolCall: ToolCallInfo? = nil) {
+        chat.append(ChatMessage(role: role, text: text, orderDraft: draft, toolCall: toolCall))
+    }
+
+    /// 用户取消一张订单草稿卡
+    func dismissDraft(id: UUID) {
+        chat.removeAll { $0.id == id }
     }
 
     /// 发送用户消息，驱动「模型 → 工具 → 模型」循环
@@ -112,7 +119,11 @@ final class AppStore: ObservableObject {
         }
         appendChat("user", input)
         busy = true
-        defer { busy = false }
+        agentStatus = "思考中…"
+        defer {
+            busy = false
+            agentStatus = nil
+        }
 
         var messages: [[String: Any]] = [
             ["role": "system", "content": "你是交易助手，运行在用户本地。可用工具查询行情/资产，或生成订单草稿。任何真实下单必须先得到用户确认，confirmed 参数只能由用户确认后置为 true。"]
@@ -126,6 +137,7 @@ final class AppStore: ObservableObject {
                 guard let calls = reply.tool_calls, !calls.isEmpty else { break }
                 var toolMsgs: [[String: Any]] = []
                 for call in calls {
+                    agentStatus = Self.statusText(for: call.function.name, arguments: call.function.arguments)
                     let result = await runTool(name: call.function.name,
                                                arguments: call.function.arguments)
                     toolMsgs.append(["role": "tool", "tool_call_id": call.id, "content": result])
@@ -138,6 +150,7 @@ final class AppStore: ObservableObject {
                 var next = messages
                 next.append(["role": "assistant", "tool_calls": try JSONSerialization.jsonObject(with: JSONEncoder().encode(calls))])
                 next.append(contentsOf: toolMsgs)
+                agentStatus = "思考中…"
                 reply = try await ai.chat(messages: next, tools: Self.toolSchemas)
             }
             appendChat("assistant", reply.content ?? "（无内容）")
@@ -216,7 +229,20 @@ final class AppStore: ObservableObject {
                           sz: sz, px: p["px"] as? String)
     }
 
-    /// 执行 AI 请求的工具，返回 JSON 字符串
+    /// 工具执行中的状态文案（显示在对话底部）
+    static func statusText(for name: String, arguments: String) -> String {
+        switch name {
+        case "get_ticker":
+            let instId = (try? JSONSerialization.jsonObject(with: Data(arguments.utf8)) as? [String: Any])?["instId"] as? String ?? "行情"
+            return "正在查询 \(instId) 行情…"
+        case "get_balance": return "正在查询账户余额…"
+        case "get_positions": return "正在查询持仓…"
+        case "place_order": return "正在处理订单…"
+        default: return "执行中…"
+        }
+    }
+
+    /// 执行 AI 请求的工具，返回 JSON 字符串；同时在对话里留一张操作卡片
     private func runTool(name: String, arguments: String) async -> String {
         let p = parseArgs(arguments)
         switch name {
@@ -224,20 +250,37 @@ final class AppStore: ObservableObject {
             let instId = (p["instId"] as? String) ?? "BTC-USDT"
             do {
                 let t = try await okx.ticker(instId: instId)
+                let summary = "已查询 \(instId) · \(t.last)（\(String(format: "%+.2f%%", t.changePct))）"
+                appendChat("tool", summary, toolCall: ToolCallInfo(name: name, success: true))
                 return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(t))) ?? "查询失败"
-            } catch { return "查询失败：\(error.localizedDescription)" }
+            } catch {
+                appendChat("tool", "查询 \(instId) 行情失败", toolCall: ToolCallInfo(name: name, success: false))
+                return "查询失败：\(error.localizedDescription)"
+            }
 
         case "get_balance":
             do {
                 let b = try await okx.balance()
+                let total = b.reduce(0) { $0 + $1.eqValue }
+                let summary = "已查询账户余额 · 权益 $\(String(format: "%.2f", total))（\(b.count) 个币种）"
+                appendChat("tool", summary, toolCall: ToolCallInfo(name: name, success: true))
                 return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(b))) ?? "查询失败"
-            } catch { return "查询失败：\(error.localizedDescription)" }
+            } catch {
+                appendChat("tool", "查询余额失败", toolCall: ToolCallInfo(name: name, success: false))
+                return "查询失败：\(error.localizedDescription)"
+            }
 
         case "get_positions":
             do {
                 let r = try await okx.positions()
+                let upl = r.reduce(0) { $0 + $1.uplValue }
+                let summary = "已查询持仓 · \(r.count) 个持仓，浮动盈亏 \(String(format: "%+.2f", upl))"
+                appendChat("tool", summary, toolCall: ToolCallInfo(name: name, success: true))
                 return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(r))) ?? "查询失败"
-            } catch { return "查询失败：\(error.localizedDescription)" }
+            } catch {
+                appendChat("tool", "查询持仓失败", toolCall: ToolCallInfo(name: name, success: false))
+                return "查询失败：\(error.localizedDescription)"
+            }
 
         case "place_order":
             guard let draft = parseDraft(arguments) else { return "参数不完整" }
@@ -249,6 +292,7 @@ final class AppStore: ObservableObject {
             }
             let msg = await placeOrder(instId: draft.instId, side: draft.side,
                                        ordType: draft.ordType, sz: draft.sz, px: draft.px)
+            appendChat("tool", msg, toolCall: ToolCallInfo(name: name, success: msg.hasPrefix("下单成功")))
             return msg
 
         default:

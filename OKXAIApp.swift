@@ -18,14 +18,14 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
+            AIChatView()
+                .tabItem { Label("智能体", systemImage: "sparkles") }
             MarketView()
                 .tabItem { Label("行情", systemImage: "chart.line.uptrend.xyaxis") }
             AccountView()
                 .tabItem { Label("资产", systemImage: "wallet.bifold") }
             TradeView()
                 .tabItem { Label("交易", systemImage: "arrow.left.arrow.right") }
-            AIChatView()
-                .tabItem { Label("AI", systemImage: "bubble.left.and.bubble.right") }
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
         }

@@ -99,6 +99,32 @@ struct ChatMessage: Identifiable {
     var text: String
     /// AI 生成的、等待用户确认的订单草稿
     var orderDraft: OrderDraft?
+    /// AI 执行的欧易工具调用（显示为操作卡片）
+    var toolCall: ToolCallInfo? = nil
+}
+
+/// AI 执行的一次欧易工具调用
+struct ToolCallInfo {
+    let name: String // get_ticker / get_balance / get_positions / place_order
+    let success: Bool
+    var title: String {
+        switch name {
+        case "get_ticker": return "查询行情"
+        case "get_balance": return "查询余额"
+        case "get_positions": return "查询持仓"
+        case "place_order": return "下单"
+        default: return name
+        }
+    }
+    var icon: String {
+        switch name {
+        case "get_ticker": return "magnifyingglass"
+        case "get_balance": return "wallet.bifold"
+        case "get_positions": return "list.bullet"
+        case "place_order": return "cart"
+        default: return "bolt"
+        }
+    }
 }
 
 /// AI 提议但尚未执行的订单
