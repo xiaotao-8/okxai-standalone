@@ -64,7 +64,7 @@ enum Backtest {
             }
 
             let v = inPos ? equity * closes[i] / entry : equity
-            curve.append(EquityPoint(t: candles[i].time, v: v))
+            curve.append(EquityPoint(t: Date(timeIntervalSince1970: (Double(candles[i].ts) ?? 0) / 1000), v: v))
             peak = max(peak, v)
             mdd = max(mdd, peak > 0 ? (peak - v) / peak : 0)
         }
