@@ -70,11 +70,22 @@ workflows:
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/OKXAI.app"
-          xcrun simctl launch "$UDID" com.okxai.OKXAI
-          sleep 8
+          # 启动并抓 console：--console 会一直输出到 App 退出，后台跑；退出即说明 App 死了
+          xcrun simctl launch --console "$UDID" com.okxai.OKXAI > "$CM_EXPORT_DIR/okxai-console.log" 2>&1 &
+          LAUNCH_PID=$!
+          sleep 3
+          xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-early.png"
+          sleep 5
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch.png"
           sleep 4
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-2.png"
+          # 存活检查：console 进程还在 = App 还在跑
+          if kill -0 $LAUNCH_PID 2>/dev/null; then echo "APP_ALIVE: console pid $LAUNCH_PID still running"; else echo "APP_EXITED: console pid $LAUNCH_PID gone (app exited/crashed)"; fi
+          echo "--- console tail ---"
+          tail -50 "$CM_EXPORT_DIR/okxai-console.log" || true
+          echo "--- recent crash reports ---"
+          ls -lt ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head -10 || true
+          cp ~/Library/Logs/DiagnosticReports/OKXAI*.ips "$CM_EXPORT_DIR/" 2>/dev/null || echo "no OKXAI ips found"
           echo "verify done"
     artifacts:
       - OKXAI-simulator.zip
