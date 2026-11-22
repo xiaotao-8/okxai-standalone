@@ -224,19 +224,19 @@ final class AppStore: ObservableObject {
             let instId = (p["instId"] as? String) ?? "BTC-USDT"
             do {
                 let t = try await okx.ticker(instId: instId)
-                return (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(t)))?.jsonString ?? "查询失败"
+                return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(t))) ?? "查询失败"
             } catch { return "查询失败：\(error.localizedDescription)" }
 
         case "get_balance":
             do {
                 let b = try await okx.balance()
-                return (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(b)))?.jsonString ?? "查询失败"
+                return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(b))) ?? "查询失败"
             } catch { return "查询失败：\(error.localizedDescription)" }
 
         case "get_positions":
             do {
                 let r = try await okx.positions()
-                return (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(r)))?.jsonString ?? "查询失败"
+                return jsonString(try? JSONSerialization.jsonObject(with: JSONEncoder().encode(r))) ?? "查询失败"
             } catch { return "查询失败：\(error.localizedDescription)" }
 
         case "place_order":
@@ -265,9 +265,8 @@ final class AppStore: ObservableObject {
 }
 
 // 小工具：Any -> JSON 字符串
-private extension Any {
-    var jsonString: String {
-        guard let data = try? JSONSerialization.data(withJSONObject: self, options: [.prettyPrinted]) else { return "" }
-        return String(data: data, encoding: .utf8) ?? ""
-    }
+private func jsonString(_ value: Any?) -> String? {
+    guard let value else { return nil }
+    guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted]) else { return "" }
+    return String(data: data, encoding: .utf8) ?? ""
 }
