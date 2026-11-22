@@ -72,11 +72,25 @@ workflows:
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/OKXAI.app"
-          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent
+          # 1) 登录页（不带参数）
+          xcrun simctl launch "$UDID" com.okxai.OKXAI
           sleep 8
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch.png"
-          sleep 4
+          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
+          # 2) 智能体页
+          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent -PreviewTab=4
+          sleep 8
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-2.png"
+          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
+          # 3) 首页
+          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent
+          sleep 8
+          xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-3.png"
+          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
+          # 4) 行情详情（K 线）
+          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent -PreviewTab=1 -PreviewDetail=BTC-USDT
+          sleep 10
+          xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-4.png"
           echo "verify done"
     artifacts:
       - OKXAI-simulator.zip

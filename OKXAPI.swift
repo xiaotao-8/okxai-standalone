@@ -22,8 +22,8 @@ final class OKXAPI {
     var apiKey = ""
     var secretKey = ""
     var passphrase = ""
-    /// 模拟盘开关：打开后所有私有请求带 x-simulated-trading: 1
-    var demoTrading = true
+    /// 模拟盘开关：打开后所有私有请求带 x-simulated-trading: 1（默认关 = 真实盘）
+    var demoTrading = false
 
     private let base = URL(string: "https://www.okx.com")!
     private let session: URLSession = .shared
@@ -140,13 +140,16 @@ final class OKXAPI {
     /// 下单。参数示例：instId=BTC-USDT, side=buy, ordType=market, sz=0.001, tdMode=cash
     func placeOrder(instId: String, side: String, ordType: String,
                     sz: String, px: String? = nil,
-                    tdMode: String = "cash", posSide: String? = nil) async throws -> [OrderResult] {
+                    tdMode: String = "cash", posSide: String? = nil,
+                    lever: String? = nil, mgnMode: String? = nil) async throws -> [OrderResult] {
         var body: [String: Any] = [
             "instId": instId, "side": side, "ordType": ordType,
             "sz": sz, "tdMode": tdMode
         ]
         if let px, !px.isEmpty { body["px"] = px }
         if let posSide, !posSide.isEmpty { body["posSide"] = posSide }
+        if let lever, !lever.isEmpty, lever != "1" { body["lever"] = lever }
+        if let mgnMode, !mgnMode.isEmpty { body["mgnMode"] = mgnMode }
         return try await request("/api/v5/trade/order", method: "POST",
                                  body: body, auth: true,
                                  as: [OrderResult].self)
@@ -163,5 +166,38 @@ final class OKXAPI {
         return try await request("/api/v5/trade/cancel-order", method: "POST",
                                  body: body, auth: true,
                                  as: [OrderResult].self)
+    }
+
+    // MARK: - 资金：充币 / 划转 / 账单
+
+    /// 充币地址（只读）
+    func depositAddress(ccy: String) async throws -> [DepositAddress] {
+        try await request("/api/v5/asset/deposit-address",
+                          query: ["ccy": ccy], auth: true,
+                          as: [DepositAddress].self)
+    }
+
+    /// 资金划转：from/to 用账户类型码，6=资金账户，18=交易账户
+    func transfer(ccy: String, amt: String, from: String, to: String) async throws -> [TransferResult] {
+        let body: [String: Any] = ["ccy": ccy, "amt": amt, "from": from, "to": to, "type": "0"]
+        return try await request("/api/v5/asset/transfer", method: "POST",
+                                 body: body, auth: true,
+                                 as: [TransferResult].self)
+    }
+
+    /// 账单（资金流水）
+    func bills(limit: Int = 20) async throws -> [Bill] {
+        try await request("/api/v5/account/bills",
+                          query: ["limit": String(limit)], auth: true,
+                          as: [Bill].self)
+    }
+
+    // MARK: - K 线（公共接口）
+
+    func candles(instId: String, bar: String = "1H", limit: Int = 100) async throws -> [Candle] {
+        let raw = try await request("/api/v5/market/candles",
+                                    query: ["instId": instId, "bar": bar, "limit": String(limit)],
+                                    as: [[String]].self)
+        return raw.compactMap { Candle(arr: $0) }
     }
 }
