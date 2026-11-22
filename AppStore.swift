@@ -275,7 +275,9 @@ final class AppStore: ObservableObject {
         prediction = nil
 
         if !aiKey.isEmpty {
-            let prompt = """你是加密货币短线分析师。当前 \(instId) 价格 \(String(format: "%.4f", currentPrice)) USDT。请预测未来 24 小时走势，只输出 JSON，格式：{"target": 目标价数字, "pct": 预期涨跌幅数字, "reason": "一句话理由"}。不要输出任何其他内容。"""
+            let prompt = """
+            你是加密货币短线分析师。当前 \(instId) 价格 \(String(format: "%.4f", currentPrice)) USDT。请预测未来 24 小时走势，只输出 JSON，格式：{"target": 目标价数字, "pct": 预期涨跌幅数字, "reason": "一句话理由"}。不要输出任何其他内容。
+            """
             if let text = try? await ai.complete(prompt: prompt),
                let p = parsePrediction(text, base: currentPrice) {
                 var r = p; r.source = "AI"
