@@ -52,7 +52,8 @@ final class AppStore: ObservableObject {
         liveActivityEnabled = UserDefaults.standard.object(forKey: "live_activity") == nil ? true : UserDefaults.standard.bool(forKey: "live_activity")
         syncToAPI()
         // 没连过欧易、且没点过「稍后再说」，进 App 就弹授权登录
-        showAuth = !hasOKXKeys && !UserDefaults.standard.bool(forKey: "auth_dismissed")
+        // 预览用启动参数 -PreviewAgent 时跳过授权页（仅模拟器验证用，真机无此参数）
+        showAuth = !hasOKXKeys && !UserDefaults.standard.bool(forKey: "auth_dismissed") && !CommandLine.arguments.contains("-PreviewAgent")
     }
 
     func saveConfig() {

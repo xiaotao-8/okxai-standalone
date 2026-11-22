@@ -72,7 +72,7 @@ workflows:
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/OKXAI.app"
-          xcrun simctl launch "$UDID" com.okxai.OKXAI
+          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent
           sleep 8
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch.png"
           sleep 4
