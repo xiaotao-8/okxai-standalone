@@ -246,7 +246,7 @@ final class AppStore: ObservableObject {
         let isSwap = tradeMode == "swap"
         let finalInst = isSwap ? swapInstId : instId
         let mgn = isSwap ? mgnMode : nil
-        if let lev = lever, !lev.isEmpty, lev != "1", !isSwap { return "现货不支持杠杆" }
+        if !lever.isEmpty, lever != "1", !isSwap { return "现货不支持杠杆" }
         do {
             let r = try await okx.placeOrder(instId: finalInst, side: side,
                                              ordType: ordType, sz: sz, px: px,
@@ -494,20 +494,20 @@ final class AppStore: ObservableObject {
         }
         appendChat("user", input)
         busy = true
-        var conversation = chat.map { ["role": $0.role, "content": $0.text] }
+        var conversation: [[String: Any]] = chat.map { ["role": $0.role, "content": $0.text] }
         var draftForUI: OrderDraft? = nil
         for _ in 0..<8 {
             let reply = try? await ai.chat(messages: conversation, tools: toolSchemas())
-            if let d = reply?.toolDraft { draftForUI = d }
-            guard let calls = reply?.toolCalls, !calls.isEmpty else {
-                if let text = reply?.text, !text.isEmpty {
+            if let d = draftFromToolCalls(reply?.tool_calls) { draftForUI = d }
+            guard let calls = reply?.tool_calls, !calls.isEmpty else {
+                if let text = reply?.content, !text.isEmpty {
                     appendChat("assistant", text, draft: draftForUI)
                 } else if draftForUI == nil {
                     appendChat("system", "模型没有返回内容（检查 Base URL / 模型名 / 网络）")
                 }
                 break
             }
-            conversation.append(["role": "assistant", "content": NSNull(), "tool_calls": calls.map { $0.json }])
+            conversation.append(["role": "assistant", "content": NSNull(), "tool_calls": calls.map { ["id": $0.id, "type": $0.type, "function": ["name": $0.function.name, "arguments": $0.function.arguments]] }])
             for call in calls {
                 let (name, args, result) = await runTool(call)
                 conversation.append(["role": "tool", "tool_call_id": call.id, "name": name, "content": result])
@@ -561,10 +561,28 @@ final class AppStore: ObservableObject {
         ]]
     }
 
+    /// 把工具调用的 arguments JSON 字符串解析成字典
+    private func toolArgs(_ call: AIToolCall) -> [String: Any] {
+        guard let data = call.function.arguments.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        return obj
+    }
+
+    /// place_order 工具调用 → 订单草稿（聊天里展示确认卡）
+    private func draftFromToolCalls(_ calls: [AIToolCall]?) -> OrderDraft? {
+        guard let call = calls?.first(where: { $0.function.name == "place_order" }) else { return nil }
+        let args = toolArgs(call)
+        return OrderDraft(instId: (args["instId"] as? String) ?? "BTC-USDT",
+                          side: (args["side"] as? String) ?? "buy",
+                          ordType: (args["ordType"] as? String) ?? "limit",
+                          sz: (args["sz"] as? String) ?? "0.001",
+                          px: args["px"] as? String)
+    }
+
     private func runTool(_ call: AIToolCall) async -> (String, [String: Any], String) {
-        let args = call.args
+        let args = toolArgs(call)
         let instId = (args["instId"] as? String) ?? "BTC-USDT"
-        switch call.name {
+        switch call.function.name {
         case "place_order":
             let side = (args["side"] as? String) ?? "buy"
             let ordType = (args["ordType"] as? String) ?? "limit"
@@ -581,7 +599,7 @@ final class AppStore: ObservableObject {
             let text = list.map { "\($0.ccy) 可用 \($0.availBal) 总值 \($0.eq)" }.joined(separator: "；")
             return ("get_balance", args, text.isEmpty ? "无资产数据" : text)
         default:
-            return (call.name, args, "未知工具")
+            return (call.function.name, args, "未知工具")
         }
     }
 
@@ -662,7 +680,7 @@ final class AppStore: ObservableObject {
                 let sumX = xs.reduce(0, +), sumY = closes.reduce(0, +)
                 let meanX = sumX / n, meanY = sumY / n
                 let cov = zip(xs, closes).reduce(0.0) { $0 + ($1.0 - meanX) * ($1.1 - meanY) }
-                let varX = xs.reduce(0.0) { $0 + ($0 - meanX) * ($0 - meanX) }
+                let varX = xs.reduce(0.0) { $0 + ($1 - meanX) * ($1 - meanX) }
                 let slope = varX > 0 ? cov / varX : 0
                 let target = max(closes.last! + slope * 6, 0.0001)
                 let pct = (target - currentPrice) / currentPrice * 100
