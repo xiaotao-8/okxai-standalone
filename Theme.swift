@@ -109,7 +109,7 @@ struct SectionTitle: View {
     var body: some View {
         Text(title.uppercased())
             .font(.system(.caption, weight: .semibold))
-            .foregroundStyle(.textSecondary)
+            .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, 4)
             .padding(.top, 8)
     }

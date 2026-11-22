@@ -35,7 +35,7 @@ struct MarketView: View {
                         Text("24h涨跌").frame(width: 78, alignment: .trailing)
                     }
                     .textCase(nil)
-                    .foregroundStyle(.textSecondary)
+                    .foregroundStyle(Color.textSecondary)
                 }
             }
             .listStyle(.insetGrouped)
@@ -74,10 +74,10 @@ struct TickerRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(ticker.instId.components(separatedBy: "-").first ?? ticker.instId)
                     .font(.system(.body, weight: .semibold))
-                    .foregroundStyle(.textPrimary)
+                    .foregroundStyle(Color.textPrimary)
                 Text(ticker.instId)
                     .font(.caption2)
-                    .foregroundStyle(.textSecondary)
+                    .foregroundStyle(Color.textSecondary)
             }
             Spacer()
             PriceText(value: ticker.last)
@@ -116,7 +116,7 @@ struct TickerDetailView: View {
                                 .font(.system(.subheadline, weight: .semibold))
                             Text("现价 (USDT)")
                                 .font(.caption2)
-                                .foregroundStyle(.textSecondary)
+                                .foregroundStyle(Color.textSecondary)
                         }
                         Spacer()
                         ChangeBadge(pct: ticker?.changePct ?? 0)
@@ -143,7 +143,7 @@ struct TickerDetailView: View {
                                 Task { await store.loadCandles(instId: instId, bar: b) }
                             }
                             .font(.caption)
-                            .foregroundStyle(bar == b ? .appBg : .textSecondary)
+                            .foregroundStyle(bar == b ? Color.appBg : Color.textSecondary)
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background(bar == b ? Color.accent : Color.cardBg2, in: Capsule())
                         }
@@ -193,7 +193,7 @@ struct TickerDetailView: View {
                     if store.predicting {
                         HStack {
                             ProgressView()
-                            Text("正在生成预测…").font(.caption).foregroundStyle(.textSecondary)
+                            Text("正在生成预测…").font(.caption).foregroundStyle(Color.textSecondary)
                         }
                     } else if let p = store.prediction {
                         HStack(alignment: .firstTextBaseline) {
@@ -208,13 +208,13 @@ struct TickerDetailView: View {
                             Spacer()
                             Text(p.reason)
                                 .font(.caption)
-                                .foregroundStyle(.textSecondary)
+                                .foregroundStyle(Color.textSecondary)
                                 .multilineTextAlignment(.trailing)
                         }
                     } else {
                         Text("点击右上角刷新，生成 24h 价格预测")
                             .font(.caption)
-                            .foregroundStyle(.textSecondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
                 .padding()
@@ -239,8 +239,8 @@ struct TickerDetailView: View {
 
     private func stat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption2).foregroundStyle(.textSecondary)
-            Text(value).font(.system(.caption, design: .monospaced)).foregroundStyle(.textPrimary)
+            Text(title).font(.caption2).foregroundStyle(Color.textSecondary)
+            Text(value).font(.system(.caption, design: .monospaced)).foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -278,10 +278,10 @@ struct AccountView: View {
                         HStack {
                             Text("总资产估值")
                                 .font(.system(.subheadline, weight: .medium))
-                                .foregroundStyle(.textSecondary)
+                                .foregroundStyle(Color.textSecondary)
                             Button { hideBalance.toggle() } label: {
                                 Image(systemName: hideBalance ? "eye.slash" : "eye")
-                                    .foregroundStyle(.textSecondary)
+                                    .foregroundStyle(Color.textSecondary)
                             }
                             Spacer()
                             Text(store.demoTrading ? "模拟盘" : "实盘")
@@ -292,7 +292,7 @@ struct AccountView: View {
                         }
                         Text(hideBalance ? "****" : String(format: "$ %.2f", total))
                             .font(.system(size: 38, weight: .bold, design: .rounded))
-                            .foregroundStyle(.textPrimary)
+                            .foregroundStyle(Color.textPrimary)
                             .contentTransition(.numericText())
                     }
                     .padding()
@@ -302,19 +302,19 @@ struct AccountView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         SectionTitle(title: "余额")
                         if store.balances.isEmpty {
-                            Text("暂无数据").font(.caption).foregroundStyle(.textSecondary)
+                            Text("暂无数据").font(.caption).foregroundStyle(Color.textSecondary)
                         }
                         ForEach(store.balances) { b in
                             HStack {
                                 CoinIcon(symbol: b.ccy, size: 32)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(b.ccy).font(.system(.body, weight: .semibold)).foregroundStyle(.textPrimary)
-                                    Text("可用 \(b.availBal)").font(.caption2).foregroundStyle(.textSecondary)
+                                    Text(b.ccy).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                                    Text("可用 \(b.availBal)").font(.caption2).foregroundStyle(Color.textSecondary)
                                 }
                                 Spacer()
                                 Text(hideBalance ? "****" : b.eq)
                                     .font(.system(.body, design: .monospaced))
-                                    .foregroundStyle(.textPrimary)
+                                    .foregroundStyle(Color.textPrimary)
                             }
                             .padding(.vertical, 6)
                         }
@@ -326,21 +326,21 @@ struct AccountView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         SectionTitle(title: "持仓")
                         if store.positions.isEmpty {
-                            Text("暂无持仓").font(.caption).foregroundStyle(.textSecondary)
+                            Text("暂无持仓").font(.caption).foregroundStyle(Color.textSecondary)
                         }
                         ForEach(store.positions) { p in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(p.instId).font(.system(.body, weight: .semibold)).foregroundStyle(.textPrimary)
+                                    Text(p.instId).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
                                     Text("\(p.posSide) \(p.pos) · \(p.lever)x")
-                                        .font(.caption2).foregroundStyle(.textSecondary)
+                                        .font(.caption2).foregroundStyle(Color.textSecondary)
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(String(format: "%.2f", p.uplValue))
                                         .font(.system(.body, design: .monospaced))
                                         .foregroundStyle(p.uplValue >= 0 ? .upGreen : .downRed)
-                                    Text("均价 \(p.avgPx)").font(.caption2).foregroundStyle(.textSecondary)
+                                    Text("均价 \(p.avgPx)").font(.caption2).foregroundStyle(Color.textSecondary)
                                 }
                             }
                             .padding(.vertical, 6)
@@ -376,7 +376,7 @@ struct AccountView: View {
                                 store.saveSnapshotAndSyncLiveActivity()
                             }
                         Text("刷新资产后更新；关掉后灵动岛不再显示。")
-                            .font(.caption2).foregroundStyle(.textSecondary)
+                            .font(.caption2).foregroundStyle(Color.textSecondary)
                     }
                     .padding()
                     .glassCard()
@@ -402,11 +402,11 @@ struct AccountView: View {
                 .foregroundStyle(Color.accent)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(.body, weight: .semibold)).foregroundStyle(.textPrimary)
-                Text(sub).font(.caption2).foregroundStyle(.textSecondary)
+                Text(title).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                Text(sub).font(.caption2).foregroundStyle(Color.textSecondary)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.textSecondary)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.textSecondary)
         }
         .padding(.vertical, 6)
     }
@@ -421,12 +421,12 @@ struct DepositView: View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("币种").font(.caption).foregroundStyle(.textSecondary)
+                    Text("币种").font(.caption).foregroundStyle(Color.textSecondary)
                     TextField("USDT", text: $ccy)
                         .autocapitalization(.allCharacters)
                         .padding(12)
                         .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(.textPrimary)
+                        .foregroundStyle(Color.textPrimary)
                     Button {
                         Task { await store.fetchDepositAddress(ccy: ccy.uppercased()) }
                     } label: {
@@ -445,11 +445,11 @@ struct DepositView: View {
                 if !store.depositAddress.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         if !store.depositChain.isEmpty {
-                            Text("链：\(store.depositChain)").font(.caption).foregroundStyle(.textSecondary)
+                            Text("链：\(store.depositChain)").font(.caption).foregroundStyle(Color.textSecondary)
                         }
                         Text(store.depositAddress)
                             .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.textPrimary)
+                            .foregroundStyle(Color.textPrimary)
                             .textSelection(.enabled)
                         Button {
                             UIPasteboard.general.string = store.depositAddress
@@ -466,11 +466,11 @@ struct DepositView: View {
                     .padding()
                     .glassCard()
                 } else if !store.depositChain.isEmpty {
-                    Text(store.depositChain).font(.caption).foregroundStyle(.textSecondary)
+                    Text(store.depositChain).font(.caption).foregroundStyle(Color.textSecondary)
                 }
 
                 Text("只向该地址充 \(ccy.uppercased())，错链会丢币；充币前请核对链名。")
-                    .font(.caption2).foregroundStyle(.textSecondary)
+                    .font(.caption2).foregroundStyle(Color.textSecondary)
             }
             .padding()
         }
@@ -492,25 +492,25 @@ struct TransferView: View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("币种").font(.caption).foregroundStyle(.textSecondary)
+                    Text("币种").font(.caption).foregroundStyle(Color.textSecondary)
                     TextField("USDT", text: $ccy)
                         .autocapitalization(.allCharacters)
                         .padding(12)
                         .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(.textPrimary)
-                    Text("数量").font(.caption).foregroundStyle(.textSecondary)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("数量").font(.caption).foregroundStyle(Color.textSecondary)
                     TextField("0.00", text: $amt)
                         .keyboardType(.decimalPad)
                         .padding(12)
                         .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(.textPrimary)
+                        .foregroundStyle(Color.textPrimary)
                     Picker("从", selection: $from) {
                         Text("资金账户").tag("6")
                         Text("交易账户").tag("18")
                     }
                     .pickerStyle(.segmented)
                     Text("转到：\(from == "6" ? "交易账户" : "资金账户")")
-                        .font(.caption).foregroundStyle(.textSecondary)
+                        .font(.caption).foregroundStyle(Color.textSecondary)
                     Button {
                         Task { message = await store.transfer(ccy: ccy.uppercased(), amt: amt, from: from, to: from == "6" ? "18" : "6") }
                     } label: {
@@ -524,7 +524,7 @@ struct TransferView: View {
                     .buttonStyle(PressScale())
                     .disabled(amt.isEmpty)
                     if !message.isEmpty {
-                        Text(message).font(.caption).foregroundStyle(.textSecondary)
+                        Text(message).font(.caption).foregroundStyle(Color.textSecondary)
                     }
                 }
                 .padding()
@@ -545,14 +545,14 @@ struct BillsView: View {
     var body: some View {
         List {
             if store.bills.isEmpty {
-                Text("暂无账单").font(.caption).foregroundStyle(.textSecondary)
+                Text("暂无账单").font(.caption).foregroundStyle(Color.textSecondary)
             }
             ForEach(store.bills) { b in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(b.type).font(.system(.body, weight: .semibold)).foregroundStyle(.textPrimary)
+                        Text(b.type).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
                         Text("\(b.ccy)\(b.instId.map { " · \($0)" } ?? "") · \(b.timeText)")
-                            .font(.caption2).foregroundStyle(.textSecondary)
+                            .font(.caption2).foregroundStyle(Color.textSecondary)
                     }
                     Spacer()
                     Text((b.changeValue >= 0 ? "+" : "") + b.balChg)
@@ -629,7 +629,7 @@ struct TradeView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("交易对").font(.caption).foregroundStyle(.textSecondary)
+                    Text("交易对").font(.caption).foregroundStyle(Color.textSecondary)
                     Spacer()
                     Text(store.activeInstId)
                         .font(.system(.body, weight: .semibold))
@@ -650,7 +650,7 @@ struct TradeView: View {
                 // 杠杆 & 保证金模式
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("杠杆").font(.caption).foregroundStyle(.textSecondary)
+                        Text("杠杆").font(.caption).foregroundStyle(Color.textSecondary)
                         Spacer()
                         Picker("杠杆", selection: $store.lever) {
                             ForEach(["1", "2", "3", "5", "10", "20"], id: \.self) { Text("\($0)x").tag($0) }
@@ -667,7 +667,7 @@ struct TradeView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("仓位比例").font(.caption).foregroundStyle(.textSecondary)
+                        Text("仓位比例").font(.caption).foregroundStyle(Color.textSecondary)
                         Spacer()
                         Text("\(Int(pct * 100))%")
                             .font(.system(.caption, design: .monospaced))
@@ -701,7 +701,7 @@ struct TradeView: View {
             if !message.isEmpty {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.textSecondary)
+                    .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -712,7 +712,7 @@ struct TradeView: View {
     private var ordersList: some View {
         VStack(spacing: 12) {
             if store.pendingOrders.isEmpty {
-                Text("暂无当前委托").font(.caption).foregroundStyle(.textSecondary)
+                Text("暂无当前委托").font(.caption).foregroundStyle(Color.textSecondary)
             }
             ForEach(store.pendingOrders) { o in
                 VStack(alignment: .leading, spacing: 8) {
@@ -725,7 +725,7 @@ struct TradeView: View {
                     }
                     HStack {
                         Text("\(o.ordType) · 数量 \(o.sz) · 价格 \(o.px)")
-                            .font(.caption).foregroundStyle(.textSecondary)
+                            .font(.caption).foregroundStyle(Color.textSecondary)
                         Spacer()
                         Button("撤单") {
                             Task { cancelMsg = await store.cancel(ordId: o.ordId, instId: o.instId) }
@@ -740,7 +740,7 @@ struct TradeView: View {
                 .glassCard()
             }
             if !cancelMsg.isEmpty {
-                Text(cancelMsg).font(.caption).foregroundStyle(.textSecondary)
+                Text(cancelMsg).font(.caption).foregroundStyle(Color.textSecondary)
             }
         }
     }
@@ -759,13 +759,13 @@ struct TradeView: View {
 
     private func field(_ title: String, _ binding: Binding<String>, _ unit: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.textSecondary)
+            Text(title).font(.caption).foregroundStyle(Color.textSecondary)
             HStack {
                 TextField("0.00", text: binding)
                     .keyboardType(.decimalPad)
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.textPrimary)
-                Text(unit).font(.caption).foregroundStyle(.textSecondary)
+                    .foregroundStyle(Color.textPrimary)
+                Text(unit).font(.caption).foregroundStyle(Color.textSecondary)
             }
             .padding(12)
             .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -807,7 +807,7 @@ struct AIChatView: View {
                         .focused($inputFocused)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .foregroundStyle(.textPrimary)
+                        .foregroundStyle(Color.textPrimary)
                     Button {
                         let t = input; input = ""
                         Task { await store.sendChat(t) }
@@ -842,7 +842,7 @@ struct AIChatView: View {
                 .foregroundStyle(Color.accent)
             Text("我是你的智能交易助手")
                 .font(.system(.headline))
-                .foregroundStyle(.textPrimary)
+                .foregroundStyle(Color.textPrimary)
             Text(store.demoTrading ? "模拟盘模式 · 下单零风险" : "实盘模式 · 下单为真实交易")
                 .font(.caption2)
                 .foregroundStyle(store.demoTrading ? Color.accent : Color.downRed)
@@ -855,7 +855,7 @@ struct AIChatView: View {
             }
             Text("可以问我行情、查资产，或让我直接下单")
                 .font(.caption)
-                .foregroundStyle(.textSecondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -879,7 +879,7 @@ struct AIChatView: View {
                     Text(m.text)
                         .padding(12)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .foregroundStyle(.textPrimary)
+                        .foregroundStyle(Color.textPrimary)
                     if let d = m.orderDraft { orderCard(d) }
                 }
                 Spacer()
@@ -889,7 +889,7 @@ struct AIChatView: View {
 
     private func orderCard(_ d: OrderDraft) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("订单确认").font(.caption).foregroundStyle(.textSecondary)
+            Text("订单确认").font(.caption).foregroundStyle(Color.textSecondary)
             HStack {
                 Text(d.instId).font(.system(.body, weight: .semibold))
                 Spacer()
@@ -898,7 +898,7 @@ struct AIChatView: View {
                     .foregroundStyle(d.side == "buy" ? .upGreen : .downRed)
             }
             Text("\(d.ordType) · 数量 \(d.sz)\(d.px != nil ? " · 价格 \(d.px!)" : "")")
-                .font(.caption).foregroundStyle(.textSecondary)
+                .font(.caption).foregroundStyle(Color.textSecondary)
             Button {
                 Task { await store.confirmDraft(d) }
             } label: {
@@ -940,10 +940,10 @@ struct LoginView: View {
                             }
                             Text(store.appName)
                                 .font(.system(size: 32, weight: .bold, design: .rounded))
-                                .foregroundStyle(.textPrimary)
+                                .foregroundStyle(Color.textPrimary)
                             Text("连接你的欧易账户，智能体帮你交易")
                                 .font(.subheadline)
-                                .foregroundStyle(.textSecondary)
+                                .foregroundStyle(Color.textSecondary)
                         }
                         .padding(.top, 48)
 
@@ -993,7 +993,7 @@ struct LoginView: View {
 
                         Text("授权仅用于读取行情/资产与下单，密钥保存在本机钥匙串；API Key 请在欧易只开通「交易」权限，不要开通提币。")
                             .font(.caption2)
-                            .foregroundStyle(.textSecondary)
+                            .foregroundStyle(Color.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding()
@@ -1163,12 +1163,12 @@ struct LabeledField: View {
 
     var body: some View {
         HStack {
-            Text(title).frame(width: 90, alignment: .leading).foregroundStyle(.textSecondary)
+            Text(title).frame(width: 90, alignment: .leading).foregroundStyle(Color.textSecondary)
             if secure {
-                SecureField("", text: $text).foregroundStyle(.textPrimary)
+                SecureField("", text: $text).foregroundStyle(Color.textPrimary)
             } else {
                 TextField("", text: $text)
-                    .foregroundStyle(.textPrimary)
+                    .foregroundStyle(Color.textPrimary)
                     .autocapitalization(.none)
             }
         }
@@ -1201,7 +1201,7 @@ struct HomeView: View {
                              ? "\(store.appName) 已接入欧易 API，模拟盘模式"
                              : "\(store.appName) 已接入欧易 API，实盘模式 · 下单为真实交易")
                             .font(.caption)
-                            .foregroundStyle(.textSecondary)
+                            .foregroundStyle(Color.textSecondary)
                         Spacer()
                     }
                     .padding()
@@ -1231,7 +1231,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         SectionTitle(title: "涨幅榜 · 24h")
                         if topMovers.isEmpty {
-                            Text("暂无数据").font(.caption).foregroundStyle(.textSecondary)
+                            Text("暂无数据").font(.caption).foregroundStyle(Color.textSecondary)
                         }
                         ForEach(topMovers) { t in
                             HStack {
@@ -1259,10 +1259,10 @@ struct HomeView: View {
     private func marketCard(_ id: String, _ name: String) -> some View {
         let t = coin(id)
         return VStack(alignment: .leading, spacing: 6) {
-            Text(name).font(.caption2).foregroundStyle(.textSecondary)
+            Text(name).font(.caption2).foregroundStyle(Color.textSecondary)
             Text(t?.last ?? "--")
                 .font(.system(.caption, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.textPrimary)
+                .foregroundStyle(Color.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.6)
             Text(String(format: "%+.2f%%", t?.changePct ?? 0))
                 .font(.caption2)
@@ -1279,7 +1279,7 @@ struct HomeView: View {
                 Image(systemName: icon)
                     .font(.system(size: 20))
                     .foregroundStyle(Color.accent)
-                Text(title).font(.caption2).foregroundStyle(.textPrimary)
+                Text(title).font(.caption2).foregroundStyle(Color.textPrimary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
