@@ -1,6 +1,5 @@
 import SwiftUI
 import Charts
-import UIKit
 
 // MARK: - 行情
 
@@ -9,20 +8,30 @@ struct MarketView: View {
     @Binding var tab: Int
     @State private var search = ""
     @State private var scope = 0
-    @State private var path: [String] = []
+    @State private var showAlerts = false
 
     private var filtered: [Ticker] {
-        guard !search.isEmpty else { return store.tickers }
-        return store.tickers.filter { $0.instId.uppercased().contains(search.uppercased()) }
+        let base = scope == 1 ? store.tickers.filter { store.isWatched($0.instId) } : store.tickers
+        guard !search.isEmpty else { return base }
+        return base.filter { $0.instId.uppercased().contains(search.uppercased()) }
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             List {
+                Section {
+                    Picker("范围", selection: $scope) {
+                        Text("全部").tag(0)
+                        Text("自选").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                }
                 Section {
                     ForEach(filtered) { t in
                         NavigationLink(value: t.instId) {
-                            TickerRow(ticker: t)
+                            TickerRow(ticker: t,
+                                      isWatched: store.isWatched(t.instId),
+                                      onWatch: { store.toggleWatch(t.instId) })
                         }
                         .listRowBackground(Color.cardBg)
                         .listRowSeparatorTint(Color.line)
@@ -49,25 +58,29 @@ struct MarketView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { tab = 4 } label: {
-                        Label("智能体", systemImage: "sparkles")
-                            .foregroundStyle(Color.accent)
+                    HStack(spacing: 18) {
+                        Button { showAlerts = true } label: {
+                            Image(systemName: store.alerts.contains(where: { !$0.isTriggered }) ? "bell.badge" : "bell")
+                                .foregroundStyle(Color.accent)
+                        }
+                        Button { tab = 4 } label: {
+                            Label("智能体", systemImage: "sparkles")
+                                .foregroundStyle(Color.accent)
+                        }
                     }
                 }
             }
-            .task {
-                await store.refreshMarket()
-                // 模拟器验证参数：直接打开指定币种的详情页（K 线）
-                for arg in CommandLine.arguments where arg.hasPrefix("-PreviewDetail=") {
-                    path = [String(arg.dropFirst("-PreviewDetail=".count))]
-                }
-            }
+            .sheet(isPresented: $showAlerts) { AlertsView() }
+            .task { await store.refreshMarket() }
         }
     }
 }
 
 struct TickerRow: View {
     let ticker: Ticker
+    var isWatched: Bool = false
+    var onWatch: (() -> Void)? = nil
+
     var body: some View {
         HStack(spacing: 12) {
             CoinIcon(symbol: ticker.instId.replacingOccurrences(of: "-USDT", with: ""))
@@ -81,9 +94,18 @@ struct TickerRow: View {
             }
             Spacer()
             PriceText(value: ticker.last)
-                .frame(width: 104, alignment: .trailing)
+                .frame(width: 88, alignment: .trailing)
             ChangeBadge(pct: ticker.changePct)
-                .frame(width: 78, alignment: .trailing)
+                .frame(width: 68, alignment: .trailing)
+            if let onWatch {
+                Button(action: onWatch) {
+                    Image(systemName: isWatched ? "star.fill" : "star")
+                        .font(.caption)
+                        .foregroundStyle(isWatched ? Color(hex: 0xF0B90B) : Color.textSecondary)
+                        .frame(width: 24)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -104,6 +126,16 @@ struct TickerDetailView: View {
         store.candles.sorted { (Double($0.ts) ?? 0) < (Double($1.ts) ?? 0) }
     }
 
+    /// AI 信号（由预测涨跌幅推导）
+    private var signal: (String, Color) {
+        guard let p = store.prediction else { return ("--", .textSecondary) }
+        if p.pct >= 2 { return ("强烈买入", .upGreen) }
+        if p.pct >= 0.5 { return ("买入", .upGreen) }
+        if p.pct > -0.5 { return ("中性", .textSecondary) }
+        if p.pct > -2 { return ("卖出", .downRed) }
+        return ("强烈卖出", .downRed)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -119,11 +151,15 @@ struct TickerDetailView: View {
                                 .foregroundStyle(Color.textSecondary)
                         }
                         Spacer()
+                        Button { store.toggleWatch(instId) } label: {
+                            Image(systemName: store.isWatched(instId) ? "star.fill" : "star")
+                                .foregroundStyle(store.isWatched(instId) ? Color(hex: 0xF0B90B) : Color.textSecondary)
+                        }
                         ChangeBadge(pct: ticker?.changePct ?? 0)
                     }
                     Text(ticker?.last ?? "--")
                         .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .foregroundStyle((ticker?.changePct ?? 0) >= 0 ? Color.upGreen : Color.downRed)
+                        .foregroundStyle((ticker?.changePct ?? 0) >= 0 ? .upGreen : .downRed)
 
                     HStack {
                         stat("24h最高", ticker?.high24h ?? "--")
@@ -137,26 +173,51 @@ struct TickerDetailView: View {
                 // K 线
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        ForEach(["1m", "5m", "15m", "1H", "4H", "1D"], id: \.self) { b in
+                        ForEach(["1m", "5m", "15m", "30m", "1H", "4H", "1D", "1W"], id: \.self) { b in
                             Button(b) {
                                 bar = b
+                                store.candleBar = b
                                 Task { await store.loadCandles(instId: instId, bar: b) }
                             }
                             .font(.caption)
-                            .foregroundStyle(bar == b ? Color.appBg : Color.textSecondary)
+                            .foregroundStyle(bar == b ? .appBg : .textSecondary)
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background(bar == b ? Color.accent : Color.cardBg2, in: Capsule())
                         }
                     }
-                    Chart(sortedCandles) { c in
-                        RuleMark(x: .value("时间", c.timeLabel),
-                                 yStart: .value("高", c.high), yEnd: .value("低", c.low))
-                            .foregroundStyle(c.close >= c.open ? Color.upGreen : Color.downRed)
-                        BarMark(x: .value("时间", c.timeLabel),
-                                yStart: .value("开", c.open), yEnd: .value("收", c.close))
-                            .foregroundStyle(c.close >= c.open ? Color.upGreen : Color.downRed)
+                    Chart {
+                        ForEach(sortedCandles) { c in
+                            RuleMark(x: .value("时间", c.timeLabel),
+                                     yStart: .value("高", c.high), yEnd: .value("低", c.low))
+                                .foregroundStyle(c.close >= c.open ? Color.upGreen : Color.downRed)
+                            BarMark(x: .value("时间", c.timeLabel),
+                                    yStart: .value("开", c.open), yEnd: .value("收", c.close))
+                                .foregroundStyle(c.close >= c.open ? Color.upGreen : Color.downRed)
+                        }
+                        ForEach(maPoints(5)) { p in
+                            LineMark(x: .value("时间", p.label), y: .value("MA5", p.v))
+                                .foregroundStyle(Color(hex: 0xF0B90B))
+                        }
+                        ForEach(maPoints(10)) { p in
+                            LineMark(x: .value("时间", p.label), y: .value("MA10", p.v))
+                                .foregroundStyle(Color(hex: 0x6A5CFF))
+                        }
+                        ForEach(maPoints(20)) { p in
+                            LineMark(x: .value("时间", p.label), y: .value("MA20", p.v))
+                                .foregroundStyle(Color(hex: 0x00C2FF))
+                        }
                     }
                     .frame(height: 220)
+
+                    HStack(spacing: 14) {
+                        legendDot(Color(hex: 0xF0B90B), "MA5")
+                        legendDot(Color(hex: 0x6A5CFF), "MA10")
+                        legendDot(Color(hex: 0x00C2FF), "MA20")
+                        Spacer()
+                        Text("共 \(sortedCandles.count) 根")
+                            .font(.caption2)
+                            .foregroundStyle(Color.textSecondary)
+                    }
 
                     Chart(sortedCandles) { c in
                         BarMark(x: .value("时间", c.timeLabel), y: .value("量", Double(c.vol) ?? 0))
@@ -164,6 +225,30 @@ struct TickerDetailView: View {
                     }
                     .frame(height: 60)
                     .chartYAxis(.hidden)
+                }
+                .padding()
+                .glassCard()
+
+                // 技术指标
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionTitle(title: "技术指标")
+                    let tech = techValues
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        techCell("RSI(14)", fmt(tech.rsi), rsiColor(tech.rsi))
+                        techCell("MACD 柱", fmt(tech.hist), (tech.hist ?? 0) >= 0 ? Color.upGreen : Color.downRed)
+                        techCell("MA5", fmt(tech.ma5), .textPrimary)
+                        techCell("MA10", fmt(tech.ma10), .textPrimary)
+                        techCell("MA20", fmt(tech.ma20), .textPrimary)
+                        techCell("BOLL 中轨", fmt(tech.bollMid), .textPrimary)
+                    }
+                    HStack {
+                        Text("DIF \(fmt(tech.dif)) · DEA \(fmt(tech.dea))")
+                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                        Spacer()
+                        Text(rsiHint(tech.rsi))
+                            .font(.caption2)
+                            .foregroundStyle(rsiColor(tech.rsi))
+                    }
                 }
                 .padding()
                 .glassCard()
@@ -180,6 +265,18 @@ struct TickerDetailView: View {
                                 .foregroundStyle(Color.accent)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(Color.accent.opacity(0.15), in: Capsule())
+                            Text(signal.0)
+                                .font(.caption2)
+                                .foregroundStyle(signal.1)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(signal.1.opacity(0.15), in: Capsule())
+                            if store.predictionTotal > 0 {
+                                Text("命中率 \(store.predictionHits)/\(store.predictionTotal)")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.textSecondary)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.cardBg2, in: Capsule())
+                            }
                         }
                         Button {
                             Task { await store.predict(instId: instId,
@@ -200,10 +297,10 @@ struct TickerDetailView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(String(format: "%.4f", p.target))
                                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                                    .foregroundStyle(p.pct >= 0 ? Color.upGreen : Color.downRed)
+                                    .foregroundStyle(p.pct >= 0 ? .upGreen : .downRed)
                                 Text(String(format: "%+.2f%%", p.pct))
                                     .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(p.pct >= 0 ? Color.upGreen : Color.downRed)
+                                    .foregroundStyle(p.pct >= 0 ? .upGreen : .downRed)
                             }
                             Spacer()
                             Text(p.reason)
@@ -215,6 +312,94 @@ struct TickerDetailView: View {
                         Text("点击右上角刷新，生成 24h 价格预测")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
+                    }
+                }
+                .padding()
+                .glassCard()
+
+                // 最新成交
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle(title: "最新成交")
+                    if store.marketTrades.isEmpty {
+                        Text("暂无数据").font(.caption).foregroundStyle(Color.textSecondary)
+                    }
+                    ForEach(store.marketTrades.prefix(8)) { t in
+                        HStack {
+                            Text(t.side == "buy" ? "买" : "卖")
+                                .font(.caption2)
+                                .foregroundStyle(t.side == "buy" ? .upGreen : .downRed)
+                            Text(t.px ?? "--")
+                                .font(.system(.caption, design: .monospaced))
+                            Spacer()
+                            Text(t.sz ?? "--")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                    }
+                }
+                .padding()
+                .glassCard()
+
+                // 盘口深度
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle(title: "盘口深度")
+                    if let b = store.book {
+                        let asks = Array(b.asks.prefix(5).reversed())
+                        let bids = Array(b.bids.prefix(5))
+                        let maxSz = max(
+                            asks.compactMap { $0.count > 1 ? Double($0[1]) : nil }.max() ?? 1,
+                            bids.compactMap { $0.count > 1 ? Double($0[1]) : nil }.max() ?? 1,
+                            1
+                        )
+                        ForEach(Array(asks.enumerated()), id: \.offset) { _, lv in
+                            depthRow(price: lv.first ?? "--",
+                                     size: lv.count > 1 ? lv[1] : "--",
+                                     pct: (lv.count > 1 ? Double(lv[1]) ?? 0 : 0) / maxSz,
+                                     color: .downRed, alignRight: true)
+                        }
+                        Divider().background(Color.line)
+                        ForEach(Array(bids.enumerated()), id: \.offset) { _, lv in
+                            depthRow(price: lv.first ?? "--",
+                                     size: lv.count > 1 ? lv[1] : "--",
+                                     pct: (lv.count > 1 ? Double(lv[1]) ?? 0 : 0) / maxSz,
+                                     color: .upGreen, alignRight: false)
+                        }
+                    } else {
+                        Text("暂无盘口数据").font(.caption).foregroundStyle(Color.textSecondary)
+                    }
+                }
+                .padding()
+                .glassCard()
+
+                // 深度图（累计）
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle(title: "深度图")
+                    if depthSeries.bids.isEmpty && depthSeries.asks.isEmpty {
+                        Text("暂无深度数据").font(.caption).foregroundStyle(Color.textSecondary)
+                    } else {
+                        Chart {
+                            ForEach(depthSeries.bids) { d in
+                                AreaMark(x: .value("价格", d.x), y: .value("深度", d.y))
+                                    .foregroundStyle(Color.upGreen.opacity(0.35))
+                                LineMark(x: .value("价格", d.x), y: .value("深度", d.y))
+                                    .foregroundStyle(Color.upGreen)
+                            }
+                            ForEach(depthSeries.asks) { d in
+                                AreaMark(x: .value("价格", d.x), y: .value("深度", d.y))
+                                    .foregroundStyle(Color.downRed.opacity(0.35))
+                                LineMark(x: .value("价格", d.x), y: .value("深度", d.y))
+                                    .foregroundStyle(Color.downRed)
+                            }
+                        }
+                        .frame(height: 140)
+                        .chartYAxis(.hidden)
+                        HStack {
+                            Text("买盘 \(depthTotal(true))")
+                                .font(.caption2).foregroundStyle(Color.upGreen)
+                            Spacer()
+                            Text("卖盘 \(depthTotal(false))")
+                                .font(.caption2).foregroundStyle(Color.downRed)
+                        }
                     }
                 }
                 .padding()
@@ -232,9 +417,97 @@ struct TickerDetailView: View {
         .navigationTitle(instId)
         .navigationBarTitleDisplayMode(.inline)
             .task {
+                store.candleBar = bar
                 await store.loadCandles(instId: instId, bar: bar)
+                await store.loadMarketTrades(instId: instId)
+                await store.loadBook(instId: instId)
                 await store.predict(instId: instId, currentPrice: ticker?.lastPrice ?? 0)
             }
+    }
+
+    // MARK: - 指标计算
+
+    private var closes: [Double] { sortedCandles.map { $0.close } }
+
+    private func maPoints(_ period: Int) -> [MAPoint] {
+        let ma = Indicator.ma(closes, period)
+        return zip(sortedCandles, ma).compactMap { pair -> MAPoint? in
+            guard !pair.1.isNaN else { return nil }
+            return MAPoint(label: pair.0.timeLabel, v: pair.1)
+        }
+    }
+
+    private var techValues: (ma5: Double?, ma10: Double?, ma20: Double?, rsi: Double,
+                              dif: Double?, dea: Double?, hist: Double?,
+                              bollUp: Double?, bollMid: Double?, bollLow: Double?) {
+        let ma5 = Indicator.ma(closes, 5)
+        let ma10 = Indicator.ma(closes, 10)
+        let ma20 = Indicator.ma(closes, 20)
+        let m = Indicator.macd(closes)
+        let b = Indicator.boll(closes)
+        return (Indicator.lastValid(ma5), Indicator.lastValid(ma10), Indicator.lastValid(ma20),
+                Indicator.rsi(closes),
+                Indicator.lastValid(m.dif), Indicator.lastValid(m.dea), Indicator.lastValid(m.hist),
+                Indicator.lastValid(b.up), Indicator.lastValid(b.mid), Indicator.lastValid(b.low))
+    }
+
+    private func fmt(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "--" }
+
+    private func rsiColor(_ v: Double) -> Color {
+        if v >= 70 { return .downRed }
+        if v <= 30 { return .upGreen }
+        return .textSecondary
+    }
+
+    private func rsiHint(_ v: Double) -> String {
+        if v >= 70 { return "超买区" }
+        if v >= 55 { return "偏强" }
+        if v > 45 { return "中性" }
+        if v > 30 { return "偏弱" }
+        return "超卖区"
+    }
+
+    private func techCell(_ title: String, _ value: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption2).foregroundStyle(Color.textSecondary)
+            Text(value).font(.system(.caption, design: .monospaced)).foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func legendDot(_ color: Color, _ title: String) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(title).font(.caption2).foregroundStyle(Color.textSecondary)
+        }
+    }
+
+    // MARK: - 深度图
+
+    private var depthSeries: (bids: [DepthPoint], asks: [DepthPoint]) {
+        guard let b = store.book else { return ([], []) }
+        func parse(_ lv: [String]) -> (Double, Double)? {
+            guard lv.count > 1, let p = Double(lv[0]), let s = Double(lv[1]) else { return nil }
+            return (p, s)
+        }
+        let bidLv = b.bids.compactMap(parse).sorted { $0.0 > $1.0 }
+        let askLv = b.asks.compactMap(parse).sorted { $0.0 < $1.0 }
+        var cum = 0.0
+        let bids = bidLv.map { v -> DepthPoint in cum += v.1; return DepthPoint(x: v.0, y: cum) }
+        cum = 0.0
+        let asks = askLv.map { v -> DepthPoint in cum += v.1; return DepthPoint(x: v.0, y: cum) }
+        return (bids, asks)
+    }
+
+    private func depthTotal(_ bid: Bool) -> String {
+        let arr = bid ? depthSeries.bids : depthSeries.asks
+        guard let last = arr.last else { return "--" }
+        let v = last.y
+        if v >= 1_000_000 { return String(format: "%.2fM", v / 1_000_000) }
+        if v >= 1000 { return String(format: "%.1fK", v / 1000) }
+        return String(format: "%.2f", v)
     }
 
     private func stat(_ title: String, _ value: String) -> some View {
@@ -243,6 +516,27 @@ struct TickerDetailView: View {
             Text(value).font(.system(.caption, design: .monospaced)).foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func depthRow(price: String, size: String, pct: Double, color: Color, alignRight: Bool) -> some View {
+        HStack(spacing: 8) {
+            if alignRight { Spacer(minLength: 0) }
+            GeometryReader { g in
+                ZStack(alignment: alignRight ? .trailing : .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color.opacity(0.25))
+                        .frame(width: max(2, g.size.width * min(pct, 1)))
+                    HStack(spacing: 6) {
+                        Text(price).font(.system(.caption2, design: .monospaced))
+                        Text(size).font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .padding(.horizontal, 6)
+                }
+            }
+            .frame(height: 18)
+            if !alignRight { Spacer(minLength: 0) }
+        }
     }
 
     private func tradeButton(_ title: String, _ value: String, _ color: Color) -> some View {
@@ -284,11 +578,11 @@ struct AccountView: View {
                                     .foregroundStyle(Color.textSecondary)
                             }
                             Spacer()
-                            Text(store.demoTrading ? "模拟盘" : "实盘")
+                            Text("模拟盘")
                                 .font(.caption2)
-                                .foregroundStyle(store.demoTrading ? Color.accent : Color.upGreen)
+                                .foregroundStyle(Color.accent)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background((store.demoTrading ? Color.accent : Color.upGreen).opacity(0.15), in: Capsule())
+                                .background(Color.accent.opacity(0.15), in: Capsule())
                         }
                         Text(hideBalance ? "****" : String(format: "$ %.2f", total))
                             .font(.system(size: 38, weight: .bold, design: .rounded))
@@ -332,15 +626,25 @@ struct AccountView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(p.instId).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
-                                    Text("\(p.pos) · \(p.lever)x")
+                                    Text("\(p.posSide) \(p.pos) · \(p.lever)x")
                                         .font(.caption2).foregroundStyle(Color.textSecondary)
+                                    if p.liqPxValue > 0 {
+                                        Text("强平 \(String(format: "%.2f", p.liqPxValue)) · 风险率 \(String(format: "%.1f", p.riskRatioValue))%")
+                                            .font(.caption2)
+                                            .foregroundStyle(p.riskRatioValue > 80 ? Color.downRed : Color.textSecondary)
+                                    }
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(String(format: "%.2f", p.uplValue))
                                         .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(p.uplValue >= 0 ? Color.upGreen : Color.downRed)
-                                    Text("均价 \(p.avgPx)").font(.caption2).foregroundStyle(Color.textSecondary)
+                                        .foregroundStyle(p.uplValue >= 0 ? .upGreen : .downRed)
+                                    Text("均价 \(p.avgPx)")
+                                        .font(.caption2).foregroundStyle(Color.textSecondary)
+                                    if p.markPxValue > 0 {
+                                        Text("标记 \(String(format: "%.2f", p.markPxValue))")
+                                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                                    }
                                 }
                             }
                             .padding(.vertical, 6)
@@ -349,34 +653,45 @@ struct AccountView: View {
                     .padding()
                     .glassCard()
 
-                    // 资金：充币 / 划转 / 账单
+                    // 资金流水
                     VStack(alignment: .leading, spacing: 6) {
-                        SectionTitle(title: "资金")
-                        NavigationLink { DepositView() } label: {
-                            fundRow("充币", "qrcode", "查充币地址")
+                        SectionTitle(title: "资金流水")
+                        if store.bills.isEmpty {
+                            Text("暂无流水").font(.caption).foregroundStyle(Color.textSecondary)
                         }
-                        Divider().background(Color.line)
-                        NavigationLink { TransferView() } label: {
-                            fundRow("划转", "arrow.left.arrow.right", "资金账户 ↔ 交易账户")
-                        }
-                        Divider().background(Color.line)
-                        NavigationLink { BillsView() } label: {
-                            fundRow("账单", "list.clipboard", "资金流水")
+                        ForEach(store.bills.prefix(8)) { b in
+                            HStack {
+                                Text(b.ccy ?? "--").font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(b.balChg ?? "--")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle((Double(b.balChg ?? "0") ?? 0) >= 0 ? .upGreen : .downRed)
+                                    Text("余额 \(b.bal ?? "--")")
+                                        .font(.caption2).foregroundStyle(Color.textSecondary)
+                                }
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
                     .padding()
                     .glassCard()
 
-                    // 实时通知栏
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("实时通知栏（灵动岛与锁屏显示盈亏）", isOn: $store.liveActivityEnabled)
-                            .tint(Color.accent)
-                            .onChange(of: store.liveActivityEnabled) { _ in
-                                store.saveConfig()
-                                store.saveSnapshotAndSyncLiveActivity()
+                    // 净值曲线
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionTitle(title: "净值曲线")
+                        if store.equityHistory.count < 2 {
+                            Text("暂无数据（刷新账户后生成）")
+                                .font(.caption).foregroundStyle(Color.textSecondary)
+                        } else {
+                            Chart(store.equityHistory) { p in
+                                LineMark(x: .value("时间", p.t), y: .value("净值", p.v))
+                                    .foregroundStyle(Color.accent)
+                                    .interpolationMethod(.catmullRom)
                             }
-                        Text("刷新资产后更新；关掉后灵动岛不再显示。")
-                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                            .frame(height: 140)
+                            .chartXAxis(.hidden)
+                        }
                     }
                     .padding()
                     .glassCard()
@@ -392,183 +707,8 @@ struct AccountView: View {
                     }
                 }
             }
+            .task { await store.loadBills() }
         }
-    }
-}
-
-    private func fundRow(_ title: String, _ icon: String, _ sub: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.accent)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
-                Text(sub).font(.caption2).foregroundStyle(Color.textSecondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.textSecondary)
-        }
-        .padding(.vertical, 6)
-    }
-
-// MARK: - 充币（查地址，只读）
-
-struct DepositView: View {
-    @EnvironmentObject var store: AppStore
-    @State private var ccy = "USDT"
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("币种").font(.caption).foregroundStyle(Color.textSecondary)
-                    TextField("USDT", text: $ccy)
-                        .autocapitalization(.allCharacters)
-                        .padding(12)
-                        .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(Color.textPrimary)
-                    Button {
-                        Task { await store.fetchDepositAddress(ccy: ccy.uppercased()) }
-                    } label: {
-                        Text("查询充币地址")
-                            .font(.system(.body, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(PressScale())
-                }
-                .padding()
-                .glassCard()
-
-                if !store.depositAddress.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if !store.depositChain.isEmpty {
-                            Text("链：\(store.depositChain)").font(.caption).foregroundStyle(Color.textSecondary)
-                        }
-                        Text(store.depositAddress)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(Color.textPrimary)
-                            .textSelection(.enabled)
-                        Button {
-                            UIPasteboard.general.string = store.depositAddress
-                        } label: {
-                            Label("复制地址", systemImage: "doc.on.doc")
-                                .font(.system(.subheadline, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .foregroundStyle(Color.accent)
-                        }
-                        .buttonStyle(PressScale())
-                    }
-                    .padding()
-                    .glassCard()
-                } else if !store.depositChain.isEmpty {
-                    Text(store.depositChain).font(.caption).foregroundStyle(Color.textSecondary)
-                }
-
-                Text("只向该地址充 \(ccy.uppercased())，错链会丢币；充币前请核对链名。")
-                    .font(.caption2).foregroundStyle(Color.textSecondary)
-            }
-            .padding()
-        }
-        .background(Color.appBg.ignoresSafeArea())
-        .navigationTitle("充币")
-    }
-}
-
-// MARK: - 划转（资金账户 ↔ 交易账户）
-
-struct TransferView: View {
-    @EnvironmentObject var store: AppStore
-    @State private var ccy = "USDT"
-    @State private var amt = ""
-    @State private var from = "6"
-    @State private var message = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("币种").font(.caption).foregroundStyle(Color.textSecondary)
-                    TextField("USDT", text: $ccy)
-                        .autocapitalization(.allCharacters)
-                        .padding(12)
-                        .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(Color.textPrimary)
-                    Text("数量").font(.caption).foregroundStyle(Color.textSecondary)
-                    TextField("0.00", text: $amt)
-                        .keyboardType(.decimalPad)
-                        .padding(12)
-                        .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .foregroundStyle(Color.textPrimary)
-                    Picker("从", selection: $from) {
-                        Text("资金账户").tag("6")
-                        Text("交易账户").tag("18")
-                    }
-                    .pickerStyle(.segmented)
-                    Text("转到：\(from == "6" ? "交易账户" : "资金账户")")
-                        .font(.caption).foregroundStyle(Color.textSecondary)
-                    Button {
-                        Task { message = await store.transfer(ccy: ccy.uppercased(), amt: amt, from: from, to: from == "6" ? "18" : "6") }
-                    } label: {
-                        Text("确认划转")
-                            .font(.system(.body, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(PressScale())
-                    .disabled(amt.isEmpty)
-                    if !message.isEmpty {
-                        Text(message).font(.caption).foregroundStyle(Color.textSecondary)
-                    }
-                }
-                .padding()
-                .glassCard()
-            }
-            .padding()
-        }
-        .background(Color.appBg.ignoresSafeArea())
-        .navigationTitle("划转")
-    }
-}
-
-// MARK: - 账单（资金流水）
-
-struct BillsView: View {
-    @EnvironmentObject var store: AppStore
-
-    var body: some View {
-        List {
-            if store.bills.isEmpty {
-                Text("暂无账单").font(.caption).foregroundStyle(Color.textSecondary)
-            }
-            ForEach(store.bills, id: \.id) { b in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(b.type).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
-                        Text("\(b.ccy)\(b.instId.map { " · \($0)" } ?? "") · \(b.timeText)")
-                            .font(.caption2).foregroundStyle(Color.textSecondary)
-                    }
-                    Spacer()
-                    Text((b.changeValue >= 0 ? "+" : "") + b.balChg)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(b.changeValue >= 0 ? Color.upGreen : Color.downRed)
-                }
-                .listRowBackground(Color.cardBg)
-                .listRowSeparatorTint(Color.line)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Color.appBg.ignoresSafeArea())
-        .navigationTitle("账单")
-        .refreshable { await store.loadBills() }
-        .task { await store.loadBills() }
     }
 }
 
@@ -578,9 +718,14 @@ struct TradeView: View {
     @EnvironmentObject var store: AppStore
     @State private var tradeTab = 0
     @State private var side = "buy"
-    @State private var ordType = "limit"
+    @State private var ordKind = "limit"   // limit / market / conditional / move_order_stop
     @State private var px = ""
     @State private var sz = ""
+    @State private var tpPx = ""
+    @State private var slPx = ""
+    @State private var trigPx = ""
+    @State private var trailPct = "1"
+    @State private var activePx = ""
     @State private var pct: Double = 0
     @State private var message = ""
     @State private var cancelMsg = ""
@@ -589,32 +734,68 @@ struct TradeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    Picker("市场", selection: $store.tradeMode) {
-                        Text("现货").tag("spot")
-                        Text("合约").tag("swap")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: store.tradeMode) { _ in
-                        Task { await store.loadOrders() }
-                    }
-
                     Picker("交易", selection: $tradeTab) {
                         Text("下单").tag(0)
                         Text("当前委托").tag(1)
+                        Text("历史").tag(2)
                     }
                     .pickerStyle(.segmented)
 
                     if tradeTab == 0 {
                         orderForm
-                    } else {
+                    } else if tradeTab == 1 {
                         ordersList
+                    } else {
+                        historyList
                     }
                 }
                 .padding()
             }
             .background(Color.appBg.ignoresSafeArea())
             .navigationTitle("交易")
-            .task { await store.loadOrders() }
+            .task { await store.loadOrders(); await store.loadHistory() }
+        }
+    }
+
+    // MARK: 历史委托 / 成交
+
+    private var historyList: some View {
+        VStack(spacing: 12) {
+            if store.historyOrders.isEmpty && store.fills.isEmpty {
+                Text("暂无历史记录").font(.caption).foregroundStyle(Color.textSecondary)
+            }
+            if !store.historyOrders.isEmpty {
+                SectionTitle(title: "历史委托")
+                ForEach(store.historyOrders.prefix(10)) { o in
+                    HStack {
+                        Text(o.instId).font(.system(.body, weight: .semibold))
+                        Spacer()
+                        Text(o.side.uppercased())
+                            .font(.caption)
+                            .foregroundStyle(o.side == "buy" ? Color.upGreen : Color.downRed)
+                        Text("\(o.ordType) · \(o.sz) · \(o.state)")
+                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                    }
+                    .padding()
+                    .glassCard(radius: 14)
+                }
+            }
+            if !store.fills.isEmpty {
+                SectionTitle(title: "历史成交")
+                ForEach(store.fills.prefix(10)) { f in
+                    HStack {
+                        Text(f.instId ?? "--").font(.system(.body, weight: .semibold))
+                        Spacer()
+                        Text(f.side?.uppercased() ?? "--")
+                            .font(.caption)
+                            .foregroundStyle(f.side == "buy" ? Color.upGreen : Color.downRed)
+                        Text("\(f.fillSz ?? "--") @ \(f.fillPx ?? "--")")
+                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                    }
+                    .padding()
+                    .glassCard(radius: 14)
+                }
+            }
         }
     }
 
@@ -631,21 +812,55 @@ struct TradeView: View {
                 HStack {
                     Text("交易对").font(.caption).foregroundStyle(Color.textSecondary)
                     Spacer()
-                    Text(store.activeInstId)
-                        .font(.system(.body, weight: .semibold))
-                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(store.orderInstId)
+                            .font(.system(.body, weight: .semibold))
+                            .foregroundStyle(Color.accent)
+                        Text(store.tradeMode == "swap" ? "永续合约" : "现货")
+                            .font(.caption2)
+                            .foregroundStyle(Color.textSecondary)
+                    }
                 }
 
-                Picker("类型", selection: $ordType) {
-                    Text("限价").tag("limit")
-                    Text("市价").tag("market")
+                // 交易模式
+                Picker("模式", selection: $store.tradeMode) {
+                    Text("现货").tag("spot")
+                    Text("合约").tag("swap")
                 }
                 .pickerStyle(.segmented)
 
-                if ordType == "limit" {
+                if store.tradeMode == "swap" {
+                    Picker("方向", selection: $store.posSide) {
+                        Text("做多").tag("long")
+                        Text("做空").tag("short")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Picker("类型", selection: $ordKind) {
+                    Text("限价").tag("limit")
+                    Text("市价").tag("market")
+                    Text("计划").tag("conditional")
+                    Text("跟踪").tag("move_order_stop")
+                }
+                .pickerStyle(.segmented)
+
+                if ordKind == "limit" || ordKind == "conditional" || ordKind == "move_order_stop" {
                     field("价格", $px, "USDT")
                 }
                 field("数量", $sz, store.activeInstId.components(separatedBy: "-").first ?? "")
+
+                Divider().background(Color.line)
+                field("止盈价(选填)", $tpPx, "USDT")
+                field("止损价(选填)", $slPx, "USDT")
+
+                if ordKind == "conditional" {
+                    field("触发价", $trigPx, "USDT")
+                }
+                if ordKind == "move_order_stop" {
+                    field("回调比例(%)", $trailPct, "%")
+                    field("激活价(选填)", $activePx, "USDT")
+                }
 
                 // 杠杆 & 保证金模式
                 VStack(alignment: .leading, spacing: 8) {
@@ -683,8 +898,13 @@ struct TradeView: View {
             Button {
                 Task {
                     message = await store.placeOrder(instId: store.activeInstId, side: side,
-                                                      ordType: ordType, sz: sz,
-                                                      px: px.isEmpty ? nil : px)
+                                                      ordType: ordKind, sz: sz,
+                                                      px: px.isEmpty ? nil : px,
+                                                      tpTriggerPx: tpPx.isEmpty ? nil : tpPx,
+                                                      slTriggerPx: slPx.isEmpty ? nil : slPx,
+                                                      triggerPx: trigPx.isEmpty ? nil : trigPx,
+                                                      callbackRatio: ordKind == "move_order_stop" ? trailPct : nil,
+                                                      activePx: activePx.isEmpty ? nil : activePx)
                 }
             } label: {
                 Text(side == "buy" ? "买入 \(store.activeInstId)" : "卖出 \(store.activeInstId)")
@@ -752,7 +972,7 @@ struct TradeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(side == value ? color : Color.cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .foregroundStyle(side == value ? Color.white : Color.textSecondary)
+                .foregroundStyle(side == value ? .white : .textSecondary)
         }
         .buttonStyle(PressScale())
     }
@@ -778,7 +998,6 @@ struct TradeView: View {
 struct AIChatView: View {
     @EnvironmentObject var store: AppStore
     @State private var input = ""
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -786,6 +1005,8 @@ struct AIChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
+                            strategyCard
+                            backtestCard
                             if store.chat.isEmpty {
                                 emptyState
                             }
@@ -795,7 +1016,6 @@ struct AIChatView: View {
                         }
                         .padding()
                     }
-                    .scrollDismissesKeyboard(.interactively)
                     .onChange(of: store.chat.count) { _ in
                         if let last = store.chat.last { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
@@ -804,7 +1024,6 @@ struct AIChatView: View {
                 // 输入栏
                 HStack(spacing: 10) {
                     TextField("问智能体…", text: $input)
-                        .focused($inputFocused)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .foregroundStyle(Color.textPrimary)
@@ -825,14 +1044,145 @@ struct AIChatView: View {
             }
             .background(Color.appBg.ignoresSafeArea())
             .navigationTitle("智能体")
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
+        }
+    }
+
+    // MARK: - AI 策略卡
+
+    private var strategyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI 策略", systemImage: "cpu")
+                    .font(.system(.subheadline, weight: .semibold))
+                Spacer()
+                Toggle("开启", isOn: Binding(
+                    get: { store.strategyEnabled },
+                    set: { _ in store.toggleStrategy() }
+                ))
+                .tint(Color.accent)
+                .labelsHidden()
+            }
+
+            if store.strategyEnabled {
+                Toggle("自动下单（谨慎，默认仅建议）", isOn: $store.strategyAutoTrade)
+                    .tint(Color.accent)
+                    .font(.caption)
+
+                HStack {
+                    Text("每次数量")
+                        .font(.caption).foregroundStyle(Color.textSecondary)
                     Spacer()
-                    Button("收起键盘") { inputFocused = false }
-                        .foregroundStyle(Color.accent)
+                    TextField("0.001", text: $store.strategyAmount)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .foregroundStyle(Color.textPrimary)
+                        .frame(width: 100)
+                }
+
+                HStack {
+                    Text("间隔 \(Int(store.strategyInterval))s")
+                        .font(.caption).foregroundStyle(Color.textSecondary)
+                    Slider(value: $store.strategyInterval, in: 60...3600, step: 60)
+                        .tint(Color.accent)
+                }
+
+                HStack {
+                    Button("立即执行一轮") {
+                        Task { await store.runStrategyCycle() }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.accent)
+                    Spacer()
+                    if store.strategyRunning { ProgressView().controlSize(.small) }
+                }
+
+                if !store.strategyLog.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(store.strategyLog, id: \.self) { line in
+                            Text(line)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.cardBg2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
+        .padding()
+        .glassCard()
+    }
+
+    // MARK: - AI 策略回测卡
+
+    private var backtestCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("策略回测", systemImage: "chart.xyaxis.line")
+                    .font(.system(.subheadline, weight: .semibold))
+                Spacer()
+                if store.backtesting { ProgressView().controlSize(.small) }
+                else {
+                    Button(store.backtest == nil ? "运行" : "重新运行") {
+                        store.runBacktest(instId: store.activeInstId)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.accent)
+                }
+            }
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("快线 \(Int(store.backtestFast))")
+                        .font(.caption2).foregroundStyle(Color.textSecondary)
+                    Slider(value: $store.backtestFast, in: 2...20, step: 1)
+                        .tint(Color.accent)
+                        .frame(width: 120)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("慢线 \(Int(store.backtestSlow))")
+                        .font(.caption2).foregroundStyle(Color.textSecondary)
+                    Slider(value: $store.backtestSlow, in: 10...60, step: 5)
+                        .tint(Color.accent)
+                        .frame(width: 120)
+                }
+            }
+
+            if let r = store.backtest {
+                HStack(spacing: 8) {
+                    btStat("收益率", String(format: "%+.2f%%", r.totalReturn),
+                           r.totalReturn >= 0 ? Color.upGreen : Color.downRed)
+                    btStat("胜率", String(format: "%.1f%%", r.winRate), .textPrimary)
+                    btStat("最大回撤", String(format: "%.1f%%", r.maxDrawdown), Color.downRed)
+                    btStat("交易次数", "\(r.tradeCount)", .textPrimary)
+                }
+                Chart(r.equity) { p in
+                    LineMark(x: .value("时间", p.t), y: .value("净值", p.v))
+                        .foregroundStyle(Color.accent)
+                        .interpolationMethod(.catmullRom)
+                }
+                .frame(height: 110)
+                .chartXAxis(.hidden)
+            } else {
+                Text(store.backtesting ? "回测中…" : "双均线策略 · \(store.activeInstId) · 最近 300 根 1H K 线")
+                    .font(.caption2)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+        .padding()
+        .glassCard()
+    }
+
+    private func btStat(_ title: String, _ value: String, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(title).font(.caption2).foregroundStyle(Color.textSecondary)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(color)
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var emptyState: some View {
@@ -843,17 +1193,7 @@ struct AIChatView: View {
             Text("我是你的智能交易助手")
                 .font(.system(.headline))
                 .foregroundStyle(Color.textPrimary)
-            Text(store.demoTrading ? "模拟盘模式 · 下单零风险" : "实盘模式 · 下单为真实交易")
-                .font(.caption2)
-                .foregroundStyle(store.demoTrading ? Color.accent : Color.downRed)
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background((store.demoTrading ? Color.accent : Color.downRed).opacity(0.15), in: Capsule())
-            if store.aiAutoTrade {
-                Text("AI 全权执行 · 下单直接成交")
-                    .font(.caption2)
-                    .foregroundStyle(Color.downRed)
-            }
-            Text("可以问我行情、查资产，或让我直接下单")
+            Text("可以问我行情、查资产，或让我生成订单草稿")
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
@@ -895,7 +1235,7 @@ struct AIChatView: View {
                 Spacer()
                 Text(d.side.uppercased())
                     .font(.system(.caption, weight: .bold))
-                    .foregroundStyle(d.side == "buy" ? Color.upGreen : Color.downRed)
+                    .foregroundStyle(d.side == "buy" ? .upGreen : .downRed)
             }
             Text("\(d.ordType) · 数量 \(d.sz)\(d.px != nil ? " · 价格 \(d.px!)" : "")")
                 .font(.caption).foregroundStyle(Color.textSecondary)
@@ -957,13 +1297,6 @@ struct LoginView: View {
                             Toggle("模拟盘模式（零风险，推荐先用）", isOn: $store.demoTrading)
                                 .tint(Color.accent)
                                 .padding(.vertical, 10)
-                            if !store.demoTrading {
-                                Text("实盘模式：登录后下单为真实交易，请确认金额与方向。")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.downRed)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.bottom, 10)
-                            }
                         }
                         .padding()
                         .glassCard()
@@ -1008,8 +1341,7 @@ struct LoginView: View {
 struct ProfileView: View {
     @EnvironmentObject var store: AppStore
     @State private var saved = false
-    @State private var testResult = ""
-    @State private var testing = false
+    @State private var showAlerts = false
 
     private var totalEquity: Double { store.balances.reduce(0) { $0 + $1.eqValue } }
 
@@ -1031,6 +1363,7 @@ struct ProfileView: View {
                     infoRow("账户总估值", String(format: "$ %.2f", totalEquity))
                     infoRow("持仓数量", "\(store.positions.count)")
                     infoRow("当前委托", "\(store.pendingCount)")
+                    infoRow("AI 预测命中率", store.predictionTotal > 0 ? "\(store.predictionHits)/\(store.predictionTotal)" : "--")
                 }
 
                 Section("应用") {
@@ -1043,6 +1376,44 @@ struct ProfileView: View {
                     }
                 }
 
+                Section("实时与提醒") {
+                    Toggle("WebSocket 实时行情", isOn: Binding(
+                        get: { store.wsEnabled },
+                        set: { _ in store.toggleWebSocket() }
+                    ))
+                    .tint(Color.accent)
+
+                    HStack {
+                        Text("连接状态")
+                        Spacer()
+                        Text(store.wsConnected ? "已连接" : "未连接")
+                            .font(.caption)
+                            .foregroundStyle(store.wsConnected ? Color.upGreen : Color.textSecondary)
+                    }
+
+                    Button("价格预警（\(store.alerts.count) 条）") { showAlerts = true }
+                        .foregroundStyle(Color.accent)
+
+                    if store.alerts.contains(where: { $0.isTriggered }) {
+                        Button("清除已触发的预警") { store.clearTriggeredAlerts() }
+                            .foregroundStyle(Color.downRed)
+                    }
+                }
+
+                Section("安全") {
+                    Toggle("Face ID 应用锁", isOn: $store.lockEnabled)
+                        .tint(Color.accent)
+                        .disabled(!AppLock.isAvailable)
+                    if !AppLock.isAvailable {
+                        Text("此设备不支持生物识别，应用锁不可用")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if store.lockEnabled {
+                        Button("立即锁定") { store.lockNow() }
+                            .foregroundStyle(Color.accent)
+                    }
+                }
+
                 Section("欧易 OKX") {
                     keyRow("API Key", text: $store.okxKey)
                     keyRow("Secret", text: $store.okxSecret, secure: true)
@@ -1051,47 +1422,14 @@ struct ProfileView: View {
                 }
 
                 Section("智能体") {
-                    HStack {
-                        Text("模型服务")
-                        Spacer()
-                        Menu {
-                            ForEach(ModelProvider.all) { p in
-                                Button(p.name) { store.selectProvider(p) }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(ModelProvider.byId(store.aiProvider).name)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(Color.accent)
-                        }
-                    }
                     keyRow("Base URL", text: $store.aiBaseURL)
                     keyRow("AI Key", text: $store.aiKey, secure: true)
                     keyRow("模型", text: $store.aiModel)
-                    Toggle("AI 全权执行交易", isOn: $store.aiAutoTrade).tint(Color.accent)
-                    if store.aiAutoTrade {
-                        Text("全权模式：智能体下单直接成交，不再逐单等你点确认。")
-                            .font(.caption2)
-                            .foregroundStyle(Color.downRed)
-                    }
-                    HStack {
-                        Button("测试连接") {
-                            testing = true
-                            Task {
-                                testResult = await store.testAI()
-                                testing = false
-                            }
-                        }
-                        .foregroundStyle(Color.accent)
-                        Spacer()
-                        if testing { ProgressView() }
-                    }
-                    if !testResult.isEmpty {
-                        Text(testResult)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                }
+
+                Section("数据") {
+                    Button("清空本地数据（自选 / 预警 / 净值 / 预测）", role: .destructive) {
+                        store.resetLocalData()
                     }
                 }
 
@@ -1113,8 +1451,15 @@ struct ProfileView: View {
                     }
                 }
 
+                Section("关于") {
+                    infoRow("版本", "1.0.0")
+                    infoRow("行情来源", "OKX v5 REST + WebSocket")
+                    infoRow("AI 接口", store.aiBaseURL)
+                    infoRow("密钥存储", "iOS 钥匙串")
+                }
+
                 Section {
-                    Text("密钥保存在 iOS 钥匙串，不会上传。")
+                    Text("密钥保存在 iOS 钥匙串，不会上传。合约交易有强平风险，请先使用模拟盘。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1123,6 +1468,7 @@ struct ProfileView: View {
             .scrollContentBackground(.hidden)
             .background(Color.appBg.ignoresSafeArea())
             .navigationTitle("我的")
+            .sheet(isPresented: $showAlerts) { AlertsView() }
         }
     }
 
@@ -1149,6 +1495,132 @@ struct ProfileView: View {
                     .multilineTextAlignment(.trailing)
                     .foregroundStyle(.secondary)
                     .autocapitalization(.none)
+            }
+        }
+    }
+}
+
+// MARK: - 价格预警
+
+struct AlertsView: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var instId = "BTC-USDT"
+    @State private var target = ""
+    @State private var direction = "above"
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // 新增
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionTitle(title: "新增预警")
+                        HStack {
+                            Text("标的").font(.caption).foregroundStyle(Color.textSecondary)
+                            Spacer()
+                            TextField("BTC-USDT", text: $instId)
+                                .multilineTextAlignment(.trailing)
+                                .autocapitalization(.none)
+                                .foregroundStyle(Color.textPrimary)
+                        }
+                        Picker("方向", selection: $direction) {
+                            Text("涨破").tag("above")
+                            Text("跌破").tag("below")
+                        }
+                        .pickerStyle(.segmented)
+                        HStack {
+                            Text("目标价").font(.caption).foregroundStyle(Color.textSecondary)
+                            Spacer()
+                            TextField("0.00", text: $target)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundStyle(Color.textPrimary)
+                        }
+                        HStack {
+                            Text("备注").font(.caption).foregroundStyle(Color.textSecondary)
+                            Spacer()
+                            TextField("选填", text: $note)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundStyle(Color.textPrimary)
+                        }
+                        Button {
+                            if let v = Double(target), v > 0 {
+                                store.addAlert(instId: instId.uppercased(), target: v,
+                                               direction: direction, note: note)
+                                target = ""
+                                note = ""
+                            }
+                        } label: {
+                            Text("添加预警")
+                                .font(.system(.body, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(PressScale())
+                    }
+                    .padding()
+                    .glassCard()
+
+                    // 列表
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionTitle(title: "我的预警 · \(store.alerts.count)")
+                        if store.alerts.isEmpty {
+                            Text("暂无预警").font(.caption).foregroundStyle(Color.textSecondary)
+                        }
+                        ForEach(store.alerts) { a in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(a.instId)
+                                        .font(.system(.body, weight: .semibold))
+                                        .foregroundStyle(Color.textPrimary)
+                                    Text(a.direction == "above" ? "涨破" : "跌破")
+                                        .font(.caption2)
+                                        .foregroundStyle(a.direction == "above" ? Color.upGreen : Color.downRed)
+                                    if !a.note.isEmpty {
+                                        Text(a.note)
+                                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                                    }
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(String(format: "%.4f", a.target))
+                                        .font(.system(.body, design: .monospaced))
+                                    if a.isTriggered {
+                                        Text("已触发")
+                                            .font(.caption2).foregroundStyle(Color.accent)
+                                    } else if let t = store.tickers.first(where: { $0.instId == a.instId }) {
+                                        Text("现价 \(t.last)")
+                                            .font(.caption2).foregroundStyle(Color.textSecondary)
+                                    }
+                                }
+                                Button {
+                                    store.removeAlert(id: a.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.downRed)
+                                        .padding(6)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                    }
+                    .padding()
+                    .glassCard()
+                }
+                .padding()
+            }
+            .background(Color.appBg.ignoresSafeArea())
+            .navigationTitle("价格预警")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
             }
         }
     }
@@ -1197,9 +1669,7 @@ struct HomeView: View {
                     // 公告条
                     HStack(spacing: 8) {
                         Image(systemName: "megaphone").foregroundStyle(Color.accent)
-                        Text(store.demoTrading
-                             ? "\(store.appName) 已接入欧易 API，模拟盘模式"
-                             : "\(store.appName) 已接入欧易 API，实盘模式 · 下单为真实交易")
+                        Text("\(store.appName) 已接入欧易 API，支持模拟盘零风险体验")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                         Spacer()
@@ -1266,7 +1736,7 @@ struct HomeView: View {
                 .lineLimit(1).minimumScaleFactor(0.6)
             Text(String(format: "%+.2f%%", t?.changePct ?? 0))
                 .font(.caption2)
-                .foregroundStyle((t?.changePct ?? 0) >= 0 ? Color.upGreen : Color.downRed)
+                .foregroundStyle((t?.changePct ?? 0) >= 0 ? .upGreen : .downRed)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()

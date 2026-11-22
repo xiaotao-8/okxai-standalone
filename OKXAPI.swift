@@ -22,8 +22,8 @@ final class OKXAPI {
     var apiKey = ""
     var secretKey = ""
     var passphrase = ""
-    /// 模拟盘开关：打开后所有私有请求带 x-simulated-trading: 1（默认关 = 真实盘）
-    var demoTrading = false
+    /// 模拟盘开关：打开后所有私有请求带 x-simulated-trading: 1
+    var demoTrading = true
 
     private let base = URL(string: "https://www.okx.com")!
     private let session: URLSession = .shared
@@ -98,28 +98,11 @@ final class OKXAPI {
         guard (200..<300).contains(http.statusCode) else {
             throw OKXError.http(http.statusCode, text)
         }
-        if data.isEmpty {
-            throw OKXError.http(http.statusCode, "服务器返回了空响应，请检查网络或关闭 VPN 后重试")
+        let decoded = try JSONDecoder().decode(OKXResponse<T>.self, from: data)
+        guard decoded.code == "0" else {
+            throw OKXError.api(decoded.code, decoded.msg)
         }
-        do {
-            let decoded = try JSONDecoder().decode(OKXResponse<T>.self, from: data)
-            guard decoded.code == "0" else {
-                throw OKXError.api(decoded.code, decoded.msg)
-            }
-            guard let value = decoded.data else {
-                throw OKXError.api(decoded.code, "欧易未返回数据")
-            }
-            return value
-        } catch let err as OKXError {
-            throw err
-        } catch {
-            // 解码失败时只读 code/msg，把欧易的真实原因露出来
-            if let env = try? JSONDecoder().decode(OKXErrorEnvelope.self, from: data),
-               env.code != "0" {
-                throw OKXError.api(env.code, env.msg)
-            }
-            throw OKXError.http(http.statusCode, "响应无法解析：\(String(text.prefix(120)))")
-        }
+        return decoded.data
     }
 
     // MARK: - 行情（公共接口）
@@ -158,7 +141,10 @@ final class OKXAPI {
     func placeOrder(instId: String, side: String, ordType: String,
                     sz: String, px: String? = nil,
                     tdMode: String = "cash", posSide: String? = nil,
-                    lever: String? = nil, mgnMode: String? = nil) async throws -> [OrderResult] {
+                    lever: String? = nil, mgnMode: String? = nil,
+                    tpTriggerPx: String? = nil, slTriggerPx: String? = nil,
+                    triggerPx: String? = nil,
+                    callbackRatio: String? = nil, activePx: String? = nil) async throws -> [OrderResult] {
         var body: [String: Any] = [
             "instId": instId, "side": side, "ordType": ordType,
             "sz": sz, "tdMode": tdMode
@@ -167,6 +153,19 @@ final class OKXAPI {
         if let posSide, !posSide.isEmpty { body["posSide"] = posSide }
         if let lever, !lever.isEmpty, lever != "1" { body["lever"] = lever }
         if let mgnMode, !mgnMode.isEmpty { body["mgnMode"] = mgnMode }
+        if let tp, !tp.isEmpty { body["tpTriggerPx"] = tp }
+        if let sl, !sl.isEmpty { body["slTriggerPx"] = sl }
+        if let trig, !trig.isEmpty {
+            body["ordType"] = "conditional"
+            body["triggerPx"] = trig
+        }
+        if let ratio = callbackRatio, !ratio.isEmpty {
+            body["ordType"] = "move_order_stop"
+            body["callbackRatio"] = ratio
+        }
+        if let ap = activePx, !ap.isEmpty {
+            body["activePx"] = ap
+        }
         return try await request("/api/v5/trade/order", method: "POST",
                                  body: body, auth: true,
                                  as: [OrderResult].self)
@@ -178,35 +177,46 @@ final class OKXAPI {
                           as: [Order].self)
     }
 
+    func historyOrders(instType: String = "SPOT") async throws -> [Order] {
+        try await request("/api/v5/trade/orders-history",
+                          query: ["instType": instType], auth: true,
+                          as: [Order].self)
+    }
+
+    func fillsHistory(instType: String = "SPOT") async throws -> [Fill] {
+        try await request("/api/v5/trade/fills-history",
+                          query: ["instType": instType], auth: true,
+                          as: [Fill].self)
+    }
+
+    func bills(ccy: String? = nil) async throws -> [Bill] {
+        var q: [String: String] = [:]
+        if let ccy, !ccy.isEmpty { q["ccy"] = ccy }
+        return try await request("/api/v5/asset/bills", query: q, auth: true,
+                                 as: [Bill].self)
+    }
+
+    // MARK: - 最新成交（公共接口）
+
+    func trades(instId: String, limit: Int = 50) async throws -> [Trade] {
+        try await request("/api/v5/market/trades",
+                          query: ["instId": instId, "limit": String(limit)],
+                          as: [Trade].self)
+    }
+
+    // MARK: - 盘口深度（公共接口）
+
+    func books(instId: String) async throws -> [BookSnapshot] {
+        try await request("/api/v5/market/books",
+                          query: ["instId": instId],
+                          as: [BookSnapshot].self)
+    }
+
     func cancelOrder(instId: String, ordId: String) async throws -> [OrderResult] {
         let body: [String: Any] = ["instId": instId, "ordId": ordId]
         return try await request("/api/v5/trade/cancel-order", method: "POST",
                                  body: body, auth: true,
                                  as: [OrderResult].self)
-    }
-
-    // MARK: - 资金：充币 / 划转 / 账单
-
-    /// 充币地址（只读）
-    func depositAddress(ccy: String) async throws -> [DepositAddress] {
-        try await request("/api/v5/asset/deposit-address",
-                          query: ["ccy": ccy], auth: true,
-                          as: [DepositAddress].self)
-    }
-
-    /// 资金划转：from/to 用账户类型码，6=资金账户，18=交易账户
-    func transfer(ccy: String, amt: String, from: String, to: String) async throws -> [TransferResult] {
-        let body: [String: Any] = ["ccy": ccy, "amt": amt, "from": from, "to": to, "type": "0"]
-        return try await request("/api/v5/asset/transfer", method: "POST",
-                                 body: body, auth: true,
-                                 as: [TransferResult].self)
-    }
-
-    /// 账单（资金流水）
-    func bills(limit: Int = 20) async throws -> [Bill] {
-        try await request("/api/v5/account/bills",
-                          query: ["limit": String(limit)], auth: true,
-                          as: [Bill].self)
     }
 
     // MARK: - K 线（公共接口）
@@ -216,5 +226,25 @@ final class OKXAPI {
                                     query: ["instId": instId, "bar": bar, "limit": String(limit)],
                                     as: [[String]].self)
         return raw.compactMap { Candle(arr: $0) }
+    }
+
+    // MARK: - WebSocket 登录签名
+
+    /// base64(HMAC-SHA256(timestamp + "GET/users/self/verify", secret))
+    static func wsLoginArgs(apiKey: String, secret: String, passphrase: String) -> [[String: Any]] {
+        let ts = ISO8601DateFormatter.okxTimestamp()
+        let sign = OKXAPI.sign(message: ts + "GET/users/self/verify", secret: secret)
+        return [["apiKey": apiKey, "passphrase": passphrase, "timestamp": ts, "sign": sign]]
+    }
+}
+
+// MARK: - ISO8601 毫秒时间戳（UTC）
+
+extension ISO8601DateFormatter {
+    static func okxTimestamp() -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f.string(from: Date())
     }
 }

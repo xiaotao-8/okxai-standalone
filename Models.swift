@@ -4,20 +4,7 @@ import Foundation
 struct OKXResponse<T: Decodable>: Decodable {
     let code: String
     let msg: String
-    let data: T?
-}
-
-/// 只读欧易错误包体（解码失败时用来取出真实的 code/msg）
-struct OKXErrorEnvelope: Decodable {
-    let code: String
-    let msg: String
-}
-
-private extension KeyedDecodingContainer {
-    /// 宽容读字符串：缺字段、null、非字符串一律当 ""
-    func decodeString(_ key: Key) -> String {
-        (try? decodeIfPresent(String.self, forKey: key)) ?? ""
-    }
+    let data: T
 }
 
 // MARK: - 行情
@@ -53,16 +40,6 @@ struct BalanceDetail: Identifiable, Codable {
     let cashBal: String
     let frozenBal: String
     let availBal: String
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        ccy = c.decodeString(.ccy)
-        eq = c.decodeString(.eq)
-        cashBal = c.decodeString(.cashBal)
-        frozenBal = c.decodeString(.frozenBal)
-        availBal = c.decodeString(.availBal)
-    }
-
     var id: String { ccy }
     var eqValue: Double { Double(eq) ?? 0 }
 }
@@ -70,32 +47,28 @@ struct BalanceDetail: Identifiable, Codable {
 // MARK: - 持仓
 struct Position: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
-        case instId, pos, posCcy, avgPx, upl, uplRatio, lever, mgnMode
+        case instId, pos, posCcy, posSide, avgPx, upl, uplRatio, lever, mgnMode
+        case markPx, liqPx, riskRatio, cTime
     }
     let instId: String
     let pos: String
     let posCcy: String
+    let posSide: String
     let avgPx: String
     let upl: String
     let uplRatio: String
     let lever: String
     let mgnMode: String
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        instId = c.decodeString(.instId)
-        pos = c.decodeString(.pos)
-        posCcy = c.decodeString(.posCcy)
-        avgPx = c.decodeString(.avgPx)
-        upl = c.decodeString(.upl)
-        uplRatio = c.decodeString(.uplRatio)
-        lever = c.decodeString(.lever)
-        mgnMode = c.decodeString(.mgnMode)
-    }
-
-    var id: String { instId }
+    let markPx: String?
+    let liqPx: String?
+    let riskRatio: String?
+    let cTime: String?
+    var id: String { instId + "-" + posSide }
     var posValue: Double { Double(pos) ?? 0 }
     var uplValue: Double { Double(upl) ?? 0 }
+    var markPxValue: Double { Double(markPx ?? "") ?? 0 }
+    var liqPxValue: Double { Double(liqPx ?? "") ?? 0 }
+    var riskRatioValue: Double { Double(riskRatio ?? "") ?? 0 }
 }
 
 // MARK: - 订单
@@ -128,45 +101,91 @@ struct OrderResult: Codable {
     var success: Bool { sCode == "0" }
 }
 
-// MARK: - 资金：充币地址 / 划转结果 / 账单
-struct DepositAddress: Codable {
-    enum CodingKeys: String, CodingKey {
-        case addr, tag, memo, chain, ccy
-    }
-    let addr: String
-    let tag: String?
-    let memo: String?
-    let chain: String?
-    let ccy: String?
+// MARK: - 盘口深度
+struct BookSnapshot: Decodable {
+    let bids: [[String]]
+    let asks: [[String]]
+    let ts: String?
+    var id: String { ts ?? UUID().uuidString }
 }
 
-struct TransferResult: Codable {
-    enum CodingKeys: String, CodingKey {
-        case transId
+// MARK: - 净值曲线点
+struct EquityPoint: Identifiable, Codable {
+    let id: UUID
+    let t: Date
+    let v: Double
+    init(t: Date, v: Double) {
+        self.id = UUID()
+        self.t = t
+        self.v = v
     }
-    let transId: String
 }
 
-struct Bill: Identifiable, Codable {
-    enum CodingKeys: String, CodingKey {
-        case billId, ccy, balChg, bal, type, ts, instId
+// MARK: - 预测记录（用于命中率统计）
+struct PredictionRecord: Codable {
+    let instId: String
+    let target: Double
+    let pct: Double
+    let price: Double
+    let date: Date
+}
+
+// MARK: - 价格预警（本地通知）
+struct PriceAlert: Identifiable, Codable {
+    let id: UUID
+    let instId: String
+    let target: Double
+    let direction: String      // above / below
+    var note: String
+    let createdAt: Date
+    var triggeredAt: Date?
+
+    init(instId: String, target: Double, direction: String, note: String = "") {
+        self.id = UUID()
+        self.instId = instId
+        self.target = target
+        self.direction = direction
+        self.note = note
+        self.createdAt = Date()
+        self.triggeredAt = nil
     }
-    let billId: String
-    let ccy: String
-    let balChg: String
-    let bal: String
-    let type: String
-    let ts: String
+
+    var isTriggered: Bool { triggeredAt != nil }
+}
+
+// MARK: - 历史成交
+struct Fill: Identifiable, Codable {
+    let tradeId: String?
+    let ordId: String?
     let instId: String?
-    var id: String { billId }
-    var changeValue: Double { Double(balChg) ?? 0 }
-    var timeText: String {
-        guard let ms = Double(ts) else { return ts }
-        let date = Date(timeIntervalSince1970: ms / 1000)
-        let f = DateFormatter()
-        f.dateFormat = "MM-dd HH:mm"
-        return f.string(from: date)
-    }
+    let side: String?
+    let fillSz: String?
+    let fillPx: String?
+    let fee: String?
+    let ts: String?
+    var id: String { tradeId ?? ordId ?? UUID().uuidString }
+}
+
+// MARK: - 资金流水
+struct Bill: Identifiable, Codable {
+    let billId: String?
+    let ccy: String?
+    let bal: String?
+    let balChg: String?
+    let type: String?
+    let ts: String?
+    var id: String { billId ?? UUID().uuidString }
+}
+
+// MARK: - 最新成交（市场）
+struct Trade: Identifiable, Codable {
+    let tradeId: String?
+    let instId: String?
+    let px: String?
+    let sz: String?
+    let side: String?
+    let ts: String?
+    var id: String { tradeId ?? UUID().uuidString }
 }
 
 // MARK: - 价格预测

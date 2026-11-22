@@ -1,6 +1,8 @@
 workflows:
   # 模拟器构建 + 启动截图验证。工程用 XcodeGen 生成（project.yml），
   # 首次构建须先跑 xcodegen。
+  # 注意：本版为原版原样（无预览参数），模拟器只能验到登录页；
+  # 登录后各页须在真机上用真实 Key 验证。
   okxai-standalone-simulator:
     name: OKXAI Standalone · simulator build
     instance_type: mac_mini_m2
@@ -44,10 +46,6 @@ workflows:
           plutil -p "$APP/Info.plist" 2>/dev/null | grep -i -E "bundle|executable|version" || echo "NO Info.plist"
           echo "--- binary ---"
           file "$APP/OKXAI" 2>/dev/null || echo "NO BINARY"
-          echo "--- widget extension ---"
-          ls -la "$APP/PlugIns" || echo "NO PlugIns"
-          plutil -p "$APP/PlugIns/OKXWidgetExtension.appex/Info.plist" 2>/dev/null | grep -i -E "bundle|NSExtension" || echo "NO EXTENSION INFO"
-          file "$APP/PlugIns/OKXWidgetExtension.appex/OKXWidgetExtension" 2>/dev/null || echo "NO EXTENSION BINARY"
           true
       - name: Package the .app
         script: |
@@ -72,25 +70,11 @@ workflows:
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/OKXAI.app"
-          # 1) 登录页（不带参数）
           xcrun simctl launch "$UDID" com.okxai.OKXAI
           sleep 8
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch.png"
-          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
-          # 2) 智能体页
-          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent -PreviewTab=4
-          sleep 8
+          sleep 4
           xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-2.png"
-          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
-          # 3) 首页
-          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent
-          sleep 8
-          xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-3.png"
-          xcrun simctl terminate "$UDID" com.okxai.OKXAI || true
-          # 4) 行情详情（K 线）
-          xcrun simctl launch "$UDID" com.okxai.OKXAI -PreviewAgent -PreviewTab=1 -PreviewDetail=BTC-USDT
-          sleep 10
-          xcrun simctl io "$UDID" screenshot "$CM_EXPORT_DIR/okxai-standalone-launch-4.png"
           echo "verify done"
     artifacts:
       - OKXAI-simulator.zip

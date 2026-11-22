@@ -9,7 +9,6 @@ struct OKXAIApp: App {
             RootView()
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
-                .onAppear { store.loadConfig() }
         }
     }
 }
@@ -19,27 +18,79 @@ struct RootView: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        Group {
-            if store.loggedIn {
-                MainTabView()
-            } else {
-                LoginView()
+        ZStack {
+            Group {
+                if store.loggedIn {
+                    MainTabView()
+                } else {
+                    LoginView()
+                }
+            }
+            .animation(.easeInOut, value: store.loggedIn)
+
+            // 全局提示条
+            if !store.notice.isEmpty {
+                VStack {
+                    Spacer()
+                    Text(store.notice)
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(.bottom, 90)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.notice)
+                .allowsHitTesting(false)
+            }
+
+            // 应用锁
+            if store.locked {
+                LockScreenView()
             }
         }
-        .animation(.easeInOut, value: store.loggedIn)
         .background(Color.appBg.ignoresSafeArea())
+    }
+}
+
+/// Face ID 锁屏
+struct LockScreenView: View {
+    @EnvironmentObject var store: AppStore
+
+    var body: some View {
+        ZStack {
+            GradientHero()
+            VStack(spacing: 20) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.accent)
+                Text(store.appName)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.textPrimary)
+                Text("应用已锁定")
+                    .font(.subheadline)
+                    .foregroundStyle(.textSecondary)
+                Button {
+                    store.unlock()
+                } label: {
+                    Label("使用 Face ID 解锁", systemImage: "faceid")
+                        .font(.system(.body, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(PressScale())
+                .padding(.horizontal, 40)
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 
 struct MainTabView: View {
     @EnvironmentObject var store: AppStore
-    // 模拟器验证参数：-PreviewTab=N 直接打开第 N 个 tab
-    @State private var tab: Int = {
-        for arg in CommandLine.arguments where arg.hasPrefix("-PreviewTab=") {
-            return Int(arg.dropFirst("-PreviewTab=".count)) ?? 0
-        }
-        return 0
-    }()
+    @State private var tab = 0
 
     var body: some View {
         TabView(selection: $tab) {

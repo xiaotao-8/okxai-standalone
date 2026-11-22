@@ -11,7 +11,6 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
-    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
   OKXAI:
     type: application
@@ -19,20 +18,16 @@ targets:
     sources:
       - path: AIClient.swift
       - path: AppStore.swift
+      - path: Backtest.swift
+      - path: Indicators.swift
       - path: KeychainStore.swift
       - path: Models.swift
-      - path: ModelProviders.swift
       - path: OKXAIApp.swift
       - path: OKXAPI.swift
+      - path: OKXWebSocket.swift
       - path: Theme.swift
+      - path: Utils.swift
       - path: Views.swift
-      - path: Assets.xcassets
-      - path: Sources/LiveActivityManager.swift
-      - path: Sources/Shared/WidgetData.swift
-    entitlements:
-      path: Config/OKXAI.entitlements
-    dependencies:
-      - target: OKXWidgetExtension
     info:
       path: Info.plist
       properties:
@@ -44,21 +39,3 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
-  OKXWidgetExtension:
-    type: app-extension
-    platform: iOS
-    sources:
-      - path: Sources/Widget/OKXAIWidget.swift
-      - path: Sources/Shared/WidgetData.swift
-    info:
-      path: Sources/Widget/Info.plist
-      properties:
-        CFBundleDisplayName: 欧易持仓
-        CFBundleShortVersionString: "1.0.0"
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    entitlements:
-      path: Config/OKXWidgetExtension.entitlements
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.okxai.OKXAI.OKXWidgetExtension
