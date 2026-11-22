@@ -188,7 +188,7 @@ final class AppStore: ObservableObject {
             let list = try await okx.depositAddress(ccy: ccy)
             if let first = list.first {
                 depositAddress = first.addr
-                depositChain = first.chain
+                depositChain = first.chain ?? ""
             } else {
                 depositChain = "该币种暂无充币地址"
             }
