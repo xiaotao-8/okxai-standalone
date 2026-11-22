@@ -26,6 +26,16 @@ final class AppStore: ObservableObject {
     /// 智能体当前在干什么（显示在对话底部状态行）
     @Published var agentStatus: String? = nil
 
+    // 欧易授权登录（首次进入 App 弹出，授权后不再弹）
+    @Published var showAuth = false
+    /// 实时通知栏（灵动岛 / 锁屏）开关，默认开
+    @Published var liveActivityEnabled = true {
+        didSet {
+            UserDefaults.standard.set(liveActivityEnabled, forKey: "live_activity")
+            syncLiveActivity()
+        }
+    }
+
     private let okx = OKXAPI.shared
     private let ai = AIClient()
 
@@ -39,7 +49,10 @@ final class AppStore: ObservableObject {
         aiBaseURL = UserDefaults.standard.string(forKey: "ai_base") ?? aiBaseURL
         aiModel = UserDefaults.standard.string(forKey: "ai_model") ?? aiModel
         demoTrading = UserDefaults.standard.object(forKey: "demo") == nil ? true : UserDefaults.standard.bool(forKey: "demo")
+        liveActivityEnabled = UserDefaults.standard.object(forKey: "live_activity") == nil ? true : UserDefaults.standard.bool(forKey: "live_activity")
         syncToAPI()
+        // 没连过欧易、且没点过「稍后再说」，进 App 就弹授权登录
+        showAuth = !hasOKXKeys && !UserDefaults.standard.bool(forKey: "auth_dismissed")
     }
 
     func saveConfig() {
@@ -78,12 +91,91 @@ final class AppStore: ObservableObject {
         do {
             balances = try await okx.balance()
             positions = try await okx.positions()
+            saveSnapshotAndSyncLiveActivity()
         } catch {
             appendChat("system", error.localizedDescription)
         }
     }
 
     var hasOKXKeys: Bool { !okxKey.isEmpty && !okxSecret.isEmpty && !okxPassphrase.isEmpty }
+
+    // MARK: - 欧易授权登录
+
+    /// 授权页点「授权并连接」：用余额接口真实校验 Key，成功才保存并进主界面
+    /// 成功返回 nil，失败返回给用户看的错误
+    func connectOKX() async -> String? {
+        guard !okxKey.isEmpty, !okxSecret.isEmpty, !okxPassphrase.isEmpty else {
+            return "请把 Key、Secret、Passphrase 都填上"
+        }
+        syncToAPI()
+        do {
+            balances = try await okx.balance()
+            positions = try await okx.positions()
+        } catch {
+            return "连接失败：\(error.localizedDescription)，请检查 Key 与权限（只需开通「交易」）"
+        }
+        saveConfig()
+        UserDefaults.standard.set(true, forKey: "auth_dismissed")
+        showAuth = false
+        saveSnapshotAndSyncLiveActivity()
+        return nil
+    }
+
+    /// 授权页点「稍后再说」：这次不弹了，设置里随时能重新连接
+    func dismissAuth() {
+        UserDefaults.standard.set(true, forKey: "auth_dismissed")
+        showAuth = false
+    }
+
+    /// 设置里点「连接欧易账号」，重新打开授权页
+    func reopenAuth() {
+        showAuth = true
+    }
+
+    /// 设置里点「断开连接」：清掉钥匙串里的 Key，下次进 App 重新授权
+    func disconnectOKX() {
+        KeychainStore.delete("okx_key")
+        KeychainStore.delete("okx_secret")
+        KeychainStore.delete("okx_pass")
+        okxKey = ""
+        okxSecret = ""
+        okxPassphrase = ""
+        balances = []
+        positions = []
+        UserDefaults.standard.set(false, forKey: "auth_dismissed")
+        AccountSnapshot.empty.save()
+        if #available(iOS 16.1, *) { LiveActivityManager.end() }
+        syncToAPI()
+        showAuth = true
+    }
+
+    // MARK: - 持仓快照 + 实时通知栏
+
+    /// 当前账户快照（小组件用）
+    private func currentSnapshot() -> AccountSnapshot {
+        AccountSnapshot(
+            totalEquity: balances.reduce(0) { $0 + $1.eqValue },
+            totalUpl: positions.reduce(0) { $0 + $1.uplValue },
+            positions: positions.map { PositionSnapshot(instId: $0.instId, pos: $0.pos, upl: $0.uplValue, avgPx: $0.avgPx) },
+            updatedAt: Date())
+    }
+
+    /// 刷新资产后：写快照给小组件，并同步实时通知栏
+    private func saveSnapshotAndSyncLiveActivity() {
+        currentSnapshot().save()
+        syncLiveActivity()
+    }
+
+    /// 按开关同步实时通知栏：开且有持仓就启动/更新，关就关闭
+    private func syncLiveActivity() {
+        guard #available(iOS 16.1, *) else { return }
+        if liveActivityEnabled {
+            let snap = currentSnapshot()
+            if !snap.positions.isEmpty { LiveActivityManager.startOrUpdate(snapshot: snap) }
+        } else {
+            LiveActivityManager.end()
+        }
+    }
 
     // MARK: - 手动下单 / 撤单
 

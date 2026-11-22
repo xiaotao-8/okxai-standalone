@@ -23,6 +23,13 @@ targets:
       - path: OKXAIApp.swift
       - path: OKXAPI.swift
       - path: Views.swift
+      - path: Sources/AuthView.swift
+      - path: Sources/LiveActivityManager.swift
+      - path: Sources/Shared/WidgetData.swift
+    entitlements:
+      path: Config/OKXAI.entitlements
+    dependencies:
+      - target: OKXWidgetExtension
     info:
       path: Info.plist
       properties:
@@ -34,3 +41,16 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
+  OKXWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Widget/OKXAIWidget.swift
+      - path: Sources/Shared/WidgetData.swift
+    info:
+      path: Sources/Widget/Info.plist
+    entitlements:
+      path: Config/OKXWidgetExtension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.okxai.OKXAI.OKXWidgetExtension

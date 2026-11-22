@@ -9,6 +9,10 @@ struct OKXAIApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear { store.loadConfig() }
+                .fullScreenCover(isPresented: $store.showAuth) {
+                    OKXAuthView()
+                        .environmentObject(store)
+                }
         }
     }
 }

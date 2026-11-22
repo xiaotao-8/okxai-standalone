@@ -82,6 +82,17 @@ struct AccountView: View {
             .toolbar {
                 Button("刷新") { Task { await store.refreshAccount() } }
             }
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("实时通知栏（灵动岛与锁屏显示盈亏）", isOn: $store.liveActivityEnabled)
+                        .font(.subheadline)
+                    Text("有持仓时自动在灵动岛与锁屏显示总盈亏，刷新资产后更新。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+            }
         }
     }
 }
@@ -384,11 +395,23 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("欧易 OKX") {
-                    TextField("API Key", text: $store.okxKey)
-                    SecureField("Secret Key", text: $store.okxSecret)
-                    SecureField("Passphrase", text: $store.okxPassphrase)
+                Section("欧易账号") {
+                    HStack {
+                        Text("状态")
+                        Spacer()
+                        Text(store.hasOKXKeys ? "已连接" : "未连接")
+                            .foregroundStyle(store.hasOKXKeys ? .green : .secondary)
+                    }
                     Toggle("模拟盘模式（零风险）", isOn: $store.demoTrading)
+                    if store.hasOKXKeys {
+                        Button("断开连接", role: .destructive) {
+                            store.disconnectOKX()
+                        }
+                    } else {
+                        Button("连接欧易账号") {
+                            store.reopenAuth()
+                        }
+                    }
                 }
                 Section("AI 模型（OpenAI 兼容）") {
                     TextField("Base URL", text: $store.aiBaseURL)
@@ -408,7 +431,7 @@ struct SettingsView: View {
                     }
                 }
                 Section {
-                    Text("密钥保存在 iOS 钥匙串，不会上传。API Key 请在欧易后台只开通「交易」权限，不要开通提币。")
+                    Text("欧易账号在首次进入 App 时授权连接，Key 只保存在本机钥匙串，不会上传。API Key 请在欧易后台只开通「交易」权限，不要开通提币。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

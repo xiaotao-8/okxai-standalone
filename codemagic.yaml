@@ -44,6 +44,10 @@ workflows:
           plutil -p "$APP/Info.plist" 2>/dev/null | grep -i -E "bundle|executable|version" || echo "NO Info.plist"
           echo "--- binary ---"
           file "$APP/OKXAI" 2>/dev/null || echo "NO BINARY"
+          echo "--- widget extension ---"
+          ls -la "$APP/PlugIns" || echo "NO PlugIns"
+          plutil -p "$APP/PlugIns/OKXWidgetExtension.appex/Info.plist" 2>/dev/null | grep -i -E "bundle|NSExtension" || echo "NO EXTENSION INFO"
+          file "$APP/PlugIns/OKXWidgetExtension.appex/OKXWidgetExtension" 2>/dev/null || echo "NO EXTENSION BINARY"
           true
       - name: Package the .app
         script: |
