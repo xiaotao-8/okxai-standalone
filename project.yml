@@ -54,7 +54,6 @@ targets:
         CFBundleShortVersionString: "1.0.0"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).OKXAIWidgetBundle
     entitlements:
       path: Config/OKXWidgetExtension.entitlements
     settings:
