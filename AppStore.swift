@@ -55,7 +55,7 @@ final class AppStore: ObservableObject {
         didSet { strategyTimer?.invalidate(); if strategyEnabled { strategyTimer = Timer.scheduledTimer(withTimeInterval: strategyInterval, repeats: true) { _ in Task { await self.runStrategyCycle() } } } }
     }
     @Published var strategyAutoTrade = false
-    @Published var strategyAmount = "0.001"
+    @Published var strategyAmount = "0.00001"
     @Published var strategyInterval: Double = 300
     @Published var strategyLog: [String] = []
     @Published var strategyRunning = false
@@ -638,7 +638,7 @@ final class AppStore: ObservableObject {
         defer { strategyRunning = false }
         guard !aiKey.isEmpty, !activeInstId.isEmpty else { return }
         let prompt = """
-你是一个保守的合约交易agent。根据以下行情数据，判断是否开仓。
+你是一个保守的现货交易agent。根据以下行情数据，判断是否买卖。
 当前标的：\(activeInstId)
 最新价：\(tickers.first { $0.instId == activeInstId }?.last ?? "--")
 24h涨跌：\(String(format: "%.2f", tickers.first { $0.instId == activeInstId }?.changePct ?? 0))%
