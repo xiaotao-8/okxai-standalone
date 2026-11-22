@@ -49,6 +49,12 @@ targets:
       - path: Sources/Shared/WidgetData.swift
     info:
       path: Sources/Widget/Info.plist
+      properties:
+        CFBundleDisplayName: 欧易持仓
+        CFBundleShortVersionString: "1.0.0"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).OKXAIWidgetBundle
     entitlements:
       path: Config/OKXWidgetExtension.entitlements
     settings:
