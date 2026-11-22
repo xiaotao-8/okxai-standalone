@@ -47,7 +47,7 @@ struct AccountSnapshot: Codable {
 
 // MARK: - 实时通知栏（灵动岛 / 锁屏 Live Activity）
 
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct OKXLiveActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var totalEquity: Double

@@ -144,7 +144,7 @@ final class AppStore: ObservableObject {
         positions = []
         UserDefaults.standard.set(false, forKey: "auth_dismissed")
         AccountSnapshot.empty.save()
-        if #available(iOS 16.1, *) { LiveActivityManager.end() }
+        if #available(iOS 16.2, *) { LiveActivityManager.end() }
         syncToAPI()
         showAuth = true
     }
@@ -168,7 +168,7 @@ final class AppStore: ObservableObject {
 
     /// 按开关同步实时通知栏：开且有持仓就启动/更新，关就关闭
     private func syncLiveActivity() {
-        guard #available(iOS 16.1, *) else { return }
+        guard #available(iOS 16.2, *) else { return }
         if liveActivityEnabled {
             let snap = currentSnapshot()
             if !snap.positions.isEmpty { LiveActivityManager.startOrUpdate(snapshot: snap) }

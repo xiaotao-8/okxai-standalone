@@ -2,7 +2,7 @@ import ActivityKit
 import Foundation
 
 /// 实时通知栏（灵动岛 / 锁屏）的启动、更新与关闭
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 enum LiveActivityManager {
     static func startOrUpdate(snapshot: AccountSnapshot) {
         let top = snapshot.positions.max(by: { abs($0.upl) < abs($1.upl) })

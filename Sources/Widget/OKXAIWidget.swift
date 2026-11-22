@@ -167,7 +167,7 @@ struct OKXAIWidget: Widget {
 
 // MARK: - 实时通知栏（灵动岛 / 锁屏）
 
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct OKXLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: OKXLiveActivityAttributes.self) { context in
@@ -232,7 +232,7 @@ struct OKXLiveActivityWidget: Widget {
 struct OKXAIWidgetBundle: WidgetBundle {
     var body: some Widget {
         OKXAIWidget()
-        if #available(iOS 16.1, *) {
+        if #available(iOS 16.2, *) {
             OKXLiveActivityWidget()
         }
     }
