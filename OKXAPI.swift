@@ -249,7 +249,7 @@ final class OKXAPI {
     /// 公共时间（无需签名），用于测试到欧易服务器的连通性
     func publicTime() async throws -> String {
         let r = try await request("/api/v5/public/time", as: OKXResponse<[ServerTimeItem]>.self)
-        return r.data.first?.ts ?? ""
+        return r.data?.first?.ts ?? ""
     }
 
     // MARK: - WebSocket 登录签名
