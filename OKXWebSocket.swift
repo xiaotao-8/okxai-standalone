@@ -40,7 +40,7 @@ final class OKXWebSocket: NSObject, URLSessionWebSocketDelegate {
         urlString = (loginArgs != nil) ? privateURL : publicURL
 
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
-        task = session?.webSocketTask(with: URL(string: url)!)
+        task = session?.webSocketTask(with: URL(string: urlString)!)
         task?.resume()
     }
 
