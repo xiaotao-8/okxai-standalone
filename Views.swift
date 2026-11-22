@@ -328,11 +328,11 @@ struct AccountView: View {
                         if store.positions.isEmpty {
                             Text("暂无持仓").font(.caption).foregroundStyle(Color.textSecondary)
                         }
-                        ForEach(store.positions, id: \.id) { p in
+                        ForEach(store.positions) { p in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(p.instId).font(.system(.body, weight: .semibold)).foregroundStyle(Color.textPrimary)
-                                    Text("\(p.posSide) \(p.pos) · \(p.lever)x")
+                                    Text("\(p.pos) · \(p.lever)x")
                                         .font(.caption2).foregroundStyle(Color.textSecondary)
                                 }
                                 Spacer()
