@@ -4,7 +4,20 @@ import Foundation
 struct OKXResponse<T: Decodable>: Decodable {
     let code: String
     let msg: String
-    let data: T
+    let data: T?
+}
+
+/// 只读欧易错误包体（解码失败时用来取出真实的 code/msg）
+struct OKXErrorEnvelope: Decodable {
+    let code: String
+    let msg: String
+}
+
+private extension KeyedDecodingContainer {
+    /// 宽容读字符串：缺字段、null、非字符串一律当 ""
+    func decodeString(_ key: Key) -> String {
+        (try? decodeIfPresent(String.self, forKey: key)) ?? ""
+    }
 }
 
 // MARK: - 行情
@@ -40,6 +53,16 @@ struct BalanceDetail: Identifiable, Codable {
     let cashBal: String
     let frozenBal: String
     let availBal: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ccy = c.decodeString(.ccy)
+        eq = c.decodeString(.eq)
+        cashBal = c.decodeString(.cashBal)
+        frozenBal = c.decodeString(.frozenBal)
+        availBal = c.decodeString(.availBal)
+    }
+
     var id: String { ccy }
     var eqValue: Double { Double(eq) ?? 0 }
 }
@@ -63,6 +86,24 @@ struct Position: Identifiable, Codable {
     let liqPx: String?
     let riskRatio: String?
     let cTime: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        instId = c.decodeString(.instId)
+        pos = c.decodeString(.pos)
+        posCcy = c.decodeString(.posCcy)
+        posSide = c.decodeString(.posSide)
+        avgPx = c.decodeString(.avgPx)
+        upl = c.decodeString(.upl)
+        uplRatio = c.decodeString(.uplRatio)
+        lever = c.decodeString(.lever)
+        mgnMode = c.decodeString(.mgnMode)
+        markPx = try? c.decodeIfPresent(String.self, forKey: .markPx)
+        liqPx = try? c.decodeIfPresent(String.self, forKey: .liqPx)
+        riskRatio = try? c.decodeIfPresent(String.self, forKey: .riskRatio)
+        cTime = try? c.decodeIfPresent(String.self, forKey: .cTime)
+    }
+
     var id: String { instId + "-" + posSide }
     var posValue: Double { Double(pos) ?? 0 }
     var uplValue: Double { Double(upl) ?? 0 }
