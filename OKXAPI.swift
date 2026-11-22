@@ -39,10 +39,14 @@ final class OKXAPI {
         return f.string(from: Date())
     }
 
-    private func sign(_ message: String) -> String {
-        let key = SymmetricKey(data: Data(secretKey.utf8))
+    private static func sign(message: String, secret: String) -> String {
+        let key = SymmetricKey(data: Data(secret.utf8))
         let code = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
         return Data(code).base64EncodedString()
+    }
+
+    private func sign(_ message: String) -> String {
+        Self.sign(message: message, secret: secretKey)
     }
 
     // MARK: - 通用请求
@@ -153,11 +157,11 @@ final class OKXAPI {
         if let posSide, !posSide.isEmpty { body["posSide"] = posSide }
         if let lever, !lever.isEmpty, lever != "1" { body["lever"] = lever }
         if let mgnMode, !mgnMode.isEmpty { body["mgnMode"] = mgnMode }
-        if let tp, !tp.isEmpty { body["tpTriggerPx"] = tp }
-        if let sl, !sl.isEmpty { body["slTriggerPx"] = sl }
-        if let trig, !trig.isEmpty {
+        if let tpTriggerPx, !tpTriggerPx.isEmpty { body["tpTriggerPx"] = tpTriggerPx }
+        if let slTriggerPx, !slTriggerPx.isEmpty { body["slTriggerPx"] = slTriggerPx }
+        if let triggerPx, !triggerPx.isEmpty {
             body["ordType"] = "conditional"
-            body["triggerPx"] = trig
+            body["triggerPx"] = triggerPx
         }
         if let ratio = callbackRatio, !ratio.isEmpty {
             body["ordType"] = "move_order_stop"

@@ -66,10 +66,10 @@ struct LockScreenView: View {
                     .foregroundStyle(Color.accent)
                 Text(store.appName)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.textPrimary)
+                    .foregroundStyle(Color.textPrimary)
                 Text("应用已锁定")
                     .font(.subheadline)
-                    .foregroundStyle(.textSecondary)
+                    .foregroundStyle(Color.textSecondary)
                 Button {
                     store.unlock()
                 } label: {
