@@ -701,6 +701,8 @@ final class AppStore: ObservableObject {
     /// 命中率：预测方向与之后实际涨跌方向是否一致
     private func recomputePredictionStats() {
         predictionTotal = predictionRecords.count
+        // 少于 2 条记录时 1..<count 会越界闪退（新装记录为空，启动即崩）
+        guard predictionRecords.count >= 2 else { predictionHits = 0; predictionTotal = 0; return }
         var hits = 0
         var counted = 0
         for i in 1..<predictionRecords.count {
