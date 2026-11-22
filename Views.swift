@@ -578,11 +578,6 @@ struct AccountView: View {
                                     .foregroundStyle(Color.textSecondary)
                             }
                             Spacer()
-                            Text("模拟盘")
-                                .font(.caption2)
-                                .foregroundStyle(Color.accent)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Color.accent.opacity(0.15), in: Capsule())
                         }
                         Text(hideBalance ? "****" : String(format: "$ %.2f", total))
                             .font(.system(size: 38, weight: .bold, design: .rounded))
@@ -1293,10 +1288,6 @@ struct LoginView: View {
                             LabeledField(title: "Secret Key", text: $store.okxSecret, secure: true)
                             Divider().background(Color.line)
                             LabeledField(title: "Passphrase", text: $store.okxPassphrase, secure: true)
-                            Divider().background(Color.line)
-                            Toggle("模拟盘模式（零风险，推荐先用）", isOn: $store.demoTrading)
-                                .tint(Color.accent)
-                                .padding(.vertical, 10)
                         }
                         .padding()
                         .glassCard()
@@ -1321,6 +1312,29 @@ struct LoginView: View {
                             Text(store.loginError)
                                 .font(.caption)
                                 .foregroundStyle(Color.downRed)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        Button {
+                            Task { await store.checkNetwork() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if store.checkingNet {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Image(systemName: "wifi")
+                                Text(store.checkingNet ? "正在测试…" : "测试与欧易服务器的连接")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(Color.accent)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .disabled(store.checkingNet)
+
+                        if !store.netStatus.isEmpty {
+                            Text(store.netStatus)
+                                .font(.caption2)
+                                .foregroundStyle(store.netOK ? Color.upGreen : Color.downRed)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
@@ -1354,9 +1368,9 @@ struct ProfileView: View {
                         CoinIcon(symbol: "OKX", size: 48)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("欧易账户").font(.system(.body, weight: .semibold))
-                            Text(store.demoTrading ? "模拟盘" : "实盘")
+                            Text("实盘账户 · 已授权")
                                 .font(.caption2)
-                                .foregroundStyle(store.demoTrading ? Color.accent : Color.upGreen)
+                                .foregroundStyle(Color.upGreen)
                         }
                         Spacer()
                     }
@@ -1418,7 +1432,6 @@ struct ProfileView: View {
                     keyRow("API Key", text: $store.okxKey)
                     keyRow("Secret", text: $store.okxSecret, secure: true)
                     keyRow("Passphrase", text: $store.okxPassphrase, secure: true)
-                    Toggle("模拟盘模式", isOn: $store.demoTrading).tint(Color.accent)
                 }
 
                 Section("智能体") {
@@ -1459,7 +1472,7 @@ struct ProfileView: View {
                 }
 
                 Section {
-                    Text("密钥保存在 iOS 钥匙串，不会上传。合约交易有强平风险，请先使用模拟盘。")
+                    Text("密钥保存在 iOS 钥匙串，不会上传。合约交易有强平风险，请控制杠杆、先小额验证。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1669,7 +1682,7 @@ struct HomeView: View {
                     // 公告条
                     HStack(spacing: 8) {
                         Image(systemName: "megaphone").foregroundStyle(Color.accent)
-                        Text("\(store.appName) 已接入欧易 API，支持模拟盘零风险体验")
+                        Text("\(store.appName) 已接入欧易 API · 行情 / 资产 / 交易 / AI 智能体")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                         Spacer()

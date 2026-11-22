@@ -15,15 +15,13 @@ enum OKXError: Error, LocalizedError {
     }
 }
 
-/// 欧易 OKX v5 API 客户端（含请求签名 / 模拟盘头）
+/// 欧易 OKX v5 API 客户端（含请求签名）
 final class OKXAPI {
     static let shared = OKXAPI()
 
     var apiKey = ""
     var secretKey = ""
     var passphrase = ""
-    /// 模拟盘开关：打开后所有私有请求带 x-simulated-trading: 1
-    var demoTrading = true
 
     private let base = URL(string: "https://www.okx.com")!
     private let session: URLSession = .shared
@@ -89,9 +87,6 @@ final class OKXAPI {
             req.setValue(sign(message), forHTTPHeaderField: "OK-ACCESS-SIGN")
             req.setValue(ts, forHTTPHeaderField: "OK-ACCESS-TIMESTAMP")
             req.setValue(passphrase, forHTTPHeaderField: "OK-ACCESS-PASSPHRASE")
-            if demoTrading {
-                req.setValue("1", forHTTPHeaderField: "x-simulated-trading")
-            }
         }
 
         let (data, response) = try await session.data(for: req)
@@ -232,6 +227,14 @@ final class OKXAPI {
         return raw.compactMap { Candle(arr: $0) }
     }
 
+    // MARK: - 网络诊断
+
+    /// 公共时间（无需签名），用于测试到欧易服务器的连通性
+    func publicTime() async throws -> String {
+        let r = try await request("/api/v5/public/time", as: OKXResponse<[ServerTimeItem]>.self)
+        return r.data.first?.ts ?? ""
+    }
+
     // MARK: - WebSocket 登录签名
 
     /// base64(HMAC-SHA256(timestamp + "GET/users/self/verify", secret))
@@ -251,4 +254,9 @@ extension ISO8601DateFormatter {
         f.timeZone = TimeZone(identifier: "UTC")
         return f.string(from: Date())
     }
+}
+
+/// 服务器时间（/api/v5/public/time 的 data 元素）
+struct ServerTimeItem: Decodable {
+    let ts: String
 }

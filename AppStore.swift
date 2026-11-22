@@ -10,7 +10,6 @@ final class AppStore: ObservableObject {
     @Published var okxKey = "" { didSet { saveConfig() } }
     @Published var okxSecret = "" { didSet { saveConfig() } }
     @Published var okxPassphrase = "" { didSet { saveConfig() } }
-    @Published var demoTrading = true { didSet { saveConfig() } }
 
     // MARK: - AI 配置
     @Published var aiBaseURL = "http://127.0.0.1:10099/v1" { didSet { saveConfig() } }
@@ -89,6 +88,11 @@ final class AppStore: ObservableObject {
     @Published var locked = false
     @Published var notice = ""
 
+    // MARK: - 网络诊断
+    @Published var checkingNet = false
+    @Published var netStatus = ""
+    @Published var netOK = false
+
     let okx = OKXAPI.shared
     private let ai = AIClient()
     private let defaults = UserDefaults.standard
@@ -97,7 +101,6 @@ final class AppStore: ObservableObject {
         okxKey = defaults.string(forKey: "okxai.key") ?? ""
         okxSecret = KeychainStore.get("okxai.secret") ?? ""
         okxPassphrase = KeychainStore.get("okxai.pass") ?? ""
-        demoTrading = defaults.object(forKey: "okxai.demo") as? Bool ?? true
         aiBaseURL = defaults.string(forKey: "okxai.aibase") ?? "http://127.0.0.1:10099/v1"
         aiKey = defaults.string(forKey: "okxai.aikey") ?? ""
         aiModel = defaults.string(forKey: "okxai.aimodel") ?? "gpt-4.1"
@@ -131,7 +134,6 @@ final class AppStore: ObservableObject {
         defaults.set(okxKey, forKey: "okxai.key")
         KeychainStore.set(okxSecret, key: "okxai.secret")
         KeychainStore.set(okxPassphrase, key: "okxai.pass")
-        defaults.set(demoTrading, forKey: "okxai.demo")
         defaults.set(aiBaseURL, forKey: "okxai.aibase")
         defaults.set(aiKey, forKey: "okxai.aikey")
         defaults.set(aiModel, forKey: "okxai.aimodel")
@@ -157,6 +159,28 @@ final class AppStore: ObservableObject {
         Storage.remove("okxai.equity")
     }
 
+    // MARK: - 网络诊断
+
+    /// 请求公共时间接口，测量到欧易服务器的连通性与延迟
+    func checkNetwork() async {
+        checkingNet = true
+        netStatus = ""
+        netOK = false
+        let start = Date()
+        do {
+            _ = try await okx.publicTime()
+            let ms = Int(Date().timeIntervalSince(start) * 1000)
+            netStatus = "欧易服务器可达 · 延迟 \(ms) ms"
+            netOK = true
+            Haptics.ok()
+        } catch {
+            netStatus = error.okxFriendly
+            netOK = false
+            Haptics.fail()
+        }
+        checkingNet = false
+    }
+
     // MARK: - 登录
 
     func login() async -> Bool {
@@ -166,7 +190,6 @@ final class AppStore: ObservableObject {
         okx.apiKey = okxKey
         okx.secretKey = okxSecret
         okx.passphrase = okxPassphrase
-        okx.demoTrading = demoTrading
         do {
             balances = try await okx.balance()
             loggedIn = true
@@ -176,7 +199,7 @@ final class AppStore: ObservableObject {
             return true
         } catch {
             loggingIn = false
-            loginError = error.localizedDescription
+            loginError = error.okxFriendly
             return false
         }
     }
@@ -367,8 +390,7 @@ final class AppStore: ObservableObject {
         let socket = OKXWebSocket()
         ws = socket
         let login = hasOKXKeys ? OKXAPI.wsLoginArgs(apiKey: okxKey, secret: okxSecret, passphrase: okxPassphrase) : nil
-        socket.start(demo: demoTrading,
-                     loginArgs: login,
+        socket.start(loginArgs: login,
                      subs: wsChannels(),
                      onMessage: { [weak self] obj in
                          Task { @MainActor in self?.handleWebSocket(obj) }

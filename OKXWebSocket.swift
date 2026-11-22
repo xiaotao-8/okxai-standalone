@@ -26,7 +26,6 @@ final class OKXWebSocket: NSObject, URLSessionWebSocketDelegate {
 
     func start(publicURL: String = "wss://ws.okx.com:8443/ws/v5/public",
                privateURL: String = "wss://ws.okx.com:8443/ws/v5/private",
-               demo: Bool = false,
                loginArgs: [[String: Any]]? = nil,
                subs: [[String: String]],
                onMessage: @escaping ([String: Any]) -> Void,
@@ -38,9 +37,7 @@ final class OKXWebSocket: NSObject, URLSessionWebSocketDelegate {
         self.onState = onState
         self.running = true
 
-        var url = (loginArgs != nil) ? privateURL : publicURL
-        if loginArgs == nil && demo { url += "?brokerId=9999" }
-        urlString = url
+        urlString = (loginArgs != nil) ? privateURL : publicURL
 
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         task = session?.webSocketTask(with: URL(string: url)!)
