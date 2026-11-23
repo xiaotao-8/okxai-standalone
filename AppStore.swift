@@ -597,7 +597,7 @@ final class AppStore: ObservableObject {
         return OrderDraft(instId: (args["instId"] as? String) ?? "BTC-USDT",
                           side: (args["side"] as? String) ?? "buy",
                           ordType: (args["ordType"] as? String) ?? "limit",
-                          sz: (args["sz"] as? String) ?? "0.001",
+                          sz: (args["sz"] as? String) ?? strategyAmount,
                           px: args["px"] as? String)
     }
 
@@ -608,7 +608,7 @@ final class AppStore: ObservableObject {
         case "place_order":
             let side = (args["side"] as? String) ?? "buy"
             let ordType = (args["ordType"] as? String) ?? "limit"
-            let sz = (args["sz"] as? String) ?? "0.001"
+            let sz = (args["sz"] as? String) ?? strategyAmount
             let px = args["px"] as? String
             let d = OrderDraft(instId: instId, side: side, ordType: ordType, sz: sz, px: px)
             return ("place_order", args, "已生成订单草稿，等待用户确认：\(instId) \(side) \(ordType) 数量 \(sz)")
